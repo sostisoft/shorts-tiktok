@@ -151,27 +151,13 @@ def generate_with_cache(
                 logger.info(f"  Imagen {i+1}/{len(prompts)}: reutilizada del banco")
                 continue
 
-        # Generar nueva
+        # Generar nueva — delega a ImageGenerator.generate() para un solo prompt
         logger.info(f"  Imagen {i+1}/{len(prompts)}: generando nueva...")
-        image_gen._load()
+        generated = image_gen.generate([prompt], job_id, output_dir)
+        if generated:
+            # generate() guarda como img_00.png, renombrar al índice correcto
+            generated[0].rename(dest)
 
-        full_prompt = (
-            f"cinematic photography, ultra realistic, 4K, professional lighting, "
-            f"shallow depth of field, {prompt}, "
-            f"financial content, modern aesthetic, Spain"
-        )
-
-        import torch
-        with torch.inference_mode():
-            image = image_gen.pipe(
-                prompt=full_prompt,
-                num_inference_steps=image_gen.steps,
-                guidance_scale=image_gen.guidance,
-                height=1920,
-                width=1080,
-            ).images[0]
-
-        image.save(dest)
         paths.append(dest)
 
         # Guardar en banco para futuro

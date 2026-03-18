@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+.env
+credentials/
+models/
+output/
+logs/
+db/
+.git/
+*.md
+!CLAUDE.md

@@ -160,7 +160,12 @@ def generate_video(decision: VideoDecision, job_id: str) -> Path:
         with_audio = tmp / "with_audio.mp4"
         if start_step < 5:
             logger.info(f"[{job_id}] Mezclando audio (CPU)...")
-            editor.mix_audio(raw_video, narration_audio, MUSIC_PATH, with_audio)
+            if MUSIC_PATH.exists():
+                editor.mix_audio(raw_video, narration_audio, MUSIC_PATH, with_audio)
+            else:
+                # Sin música de fondo — solo narración
+                logger.warning(f"[{job_id}] No hay música ({MUSIC_PATH}), solo narración")
+                editor.mix_audio_no_music(raw_video, narration_audio, with_audio)
             _save_checkpoint(tmp, 5, image_paths=image_paths, clip_paths=clip_paths)
 
         # ── Paso 6: Subtítulos ──
@@ -170,11 +175,11 @@ def generate_video(decision: VideoDecision, job_id: str) -> Path:
             editor.burn_subtitles(with_audio, decision.narration, narration_audio, with_subs)
             _save_checkpoint(tmp, 6, image_paths=image_paths, clip_paths=clip_paths)
 
-        # ── Paso 7: CTA ──
+        # ── Paso 7: Outro de marca ──
         final = tmp / "final.mp4"
         if start_step < 7:
-            logger.info(f"[{job_id}] Anadiendo CTA (CPU)...")
-            editor.add_cta(with_subs, final)
+            logger.info(f"[{job_id}] Anadiendo outro @finanzasjpg (CPU)...")
+            editor.add_outro(with_subs, final)
             _save_checkpoint(tmp, 7, image_paths=image_paths, clip_paths=clip_paths)
 
         # ── Paso 8: Mover a pending ──

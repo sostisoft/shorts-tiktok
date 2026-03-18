@@ -63,6 +63,27 @@ def mix_audio(
     return output_path
 
 
+def mix_audio_no_music(
+    video_path: Path,
+    narration_path: Path,
+    output_path: Path,
+) -> Path:
+    """Mezcla vídeo + narración sin música de fondo."""
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", str(video_path),
+        "-i", str(narration_path),
+        "-map", "0:v",
+        "-map", "1:a",
+        "-c:v", "copy",
+        "-c:a", "aac",
+        "-shortest",
+        str(output_path)
+    ]
+    subprocess.run(cmd, check=True, capture_output=True)
+    return output_path
+
+
 def burn_subtitles(
     video_path: Path,
     narration_text: str,
@@ -75,7 +96,7 @@ def burn_subtitles(
     """
     audio_duration = get_duration(narration_audio_path)
     words = narration_text.split()
-    chunk_size = 5
+    chunk_size = 3  # 3 palabras por chunk — más legible en 15s
     chunks = [words[i:i+chunk_size] for i in range(0, len(words), chunk_size)]
 
     time_per_chunk = audio_duration / len(chunks)
@@ -93,7 +114,7 @@ def burn_subtitles(
 
     # Estilo subtítulos: blanco, negrita, sombra negra, centrado abajo
     subtitle_style = (
-        "FontName=Arial,FontSize=22,Bold=1,"
+        "FontName=Arial,FontSize=28,Bold=1,"
         "PrimaryColour=&H00FFFFFF,"
         "OutlineColour=&H00000000,"
         "Outline=3,Shadow=1,"
@@ -112,20 +133,31 @@ def burn_subtitles(
     return output_path
 
 
-def add_cta(video_path: Path, output_path: Path, cta_text: str = "SUSCRÍBETE 🔔") -> Path:
-    """Añade CTA en los últimos 3 segundos."""
+def add_outro(video_path: Path, output_path: Path) -> Path:
+    """
+    Añade outro de marca fijo en los últimos 2 segundos.
+    Siempre igual: @finanzasjpg centrado para que la gente asocie la marca.
+    """
     duration = get_duration(video_path)
-    cta_start = max(0, duration - 3)
+    outro_start = max(0, duration - 2)
 
+    # Marca arriba + handle abajo — siempre el mismo cierre
     cmd = [
         "ffmpeg", "-y",
         "-i", str(video_path),
         "-vf",
-        f"drawtext=text='{cta_text}':"
+        # Línea 1: nombre del canal
+        f"drawtext=text='Finanzas Claras':"
         f"fontfile=/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf:"
-        f"fontsize=36:fontcolor=white:bordercolor=black:borderw=3:"
-        f"x=(w-text_w)/2:y=h-150:"
-        f"enable='between(t,{cta_start},{duration})'",
+        f"fontsize=42:fontcolor=white:bordercolor=black:borderw=4:"
+        f"x=(w-text_w)/2:y=h/2-40:"
+        f"enable='between(t,{outro_start},{duration})',"
+        # Línea 2: handle / @
+        f"drawtext=text='@finanzasjpg':"
+        f"fontfile=/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf:"
+        f"fontsize=28:fontcolor=yellow:bordercolor=black:borderw=3:"
+        f"x=(w-text_w)/2:y=h/2+20:"
+        f"enable='between(t,{outro_start},{duration})'",
         "-c:a", "copy",
         str(output_path)
     ]
