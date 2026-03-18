@@ -31,8 +31,11 @@ class PublishedVideo(Base):
     tiktok_url_en = Column(String, nullable=True)
     # Metadata
     description = Column(Text, nullable=True)
+    title_en = Column(String, nullable=True)
+    description_en = Column(Text, nullable=True)
+    tags_en = Column(JSON, nullable=True)
     category = Column(String, default="finanzas")
-    status = Column(String, default="pending")   # pending/generating/success/failed
+    status = Column(String, default="pending")   # pending/generating/generated/success/failed
     error = Column(Text, nullable=True)
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -102,6 +105,36 @@ def get_pending_topics() -> list[dict]:
             })
         result.sort(key=lambda x: prio_order.get(x["prioridad"], 1))
         return result
+
+
+def get_oldest_generated() -> dict | None:
+    """Devuelve el vídeo más antiguo con status='generated' listo para publicar."""
+    with Session() as s:
+        v = s.query(PublishedVideo)\
+             .filter_by(status="generated")\
+             .order_by(PublishedVideo.created_at.asc())\
+             .first()
+        if not v:
+            return None
+        return {
+            "job_id": v.job_id, "topic": v.topic, "hook": v.hook,
+            "narration": v.narration, "narration_en": v.narration_en,
+            "title": v.title, "tags": v.tags,
+            "title_en": v.title_en, "description_en": v.description_en,
+            "tags_en": v.tags_en,
+            "description": v.description, "category": v.category,
+        }
+
+
+def update_metadata(job_id: str, **kwargs):
+    """Actualiza campos de metadata en un vídeo existente."""
+    with Session() as s:
+        v = s.query(PublishedVideo).filter_by(job_id=job_id).first()
+        if v:
+            for key, val in kwargs.items():
+                if hasattr(v, key) and val is not None:
+                    setattr(v, key, val)
+            s.commit()
 
 
 def mark_topic_used(topic_id: int, job_id: str):

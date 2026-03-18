@@ -60,3 +60,58 @@ JSON exacto:
     raw = msg.content[0].text.strip()
     data = json.loads(raw)
     return VideoMetadata(**data)
+
+
+META_PROMPT_EN = """
+You are an expert in SEO and virality for YouTube Shorts in English.
+Channel: "Finanzas Claras" — personal finance tips.
+
+TITLE RULES:
+- Max 60 characters
+- Start with financial emoji (💰💸📈🏦💡)
+- Question OR shocking fact OR concrete promise
+- No false clickbait
+
+DESCRIPTION RULES:
+- First line: repeat the video hook
+- Blank line
+- 2-3 lines with natural keywords
+- Blank line
+- Hashtags: #shorts + 8-10 niche tags
+- End with: "📲 Subscribe for more finance tips"
+
+TAG RULES:
+- 10-15 tags in English
+- Mix: general (finance, investing, money) + topic-specific
+
+Respond ONLY in JSON without backticks.
+"""
+
+
+def generate_en(topic: str, hook: str, narration_en: str) -> VideoMetadata:
+    """Generate English metadata for YouTube Shorts."""
+    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+
+    msg = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=1000,
+        system=META_PROMPT_EN,
+        messages=[{"role": "user", "content": f"""
+Topic: {topic}
+Hook: {hook}
+Script (summary): {narration_en[:300]}...
+
+Generate viral metadata for YouTube Shorts in English.
+
+Exact JSON:
+{{
+  "title": "...",
+  "description": "...",
+  "tags": ["tag1", "tag2", ...]
+}}
+"""}]
+    )
+
+    raw = msg.content[0].text.strip()
+    data = json.loads(raw)
+    return VideoMetadata(**data)
