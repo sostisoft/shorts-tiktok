@@ -8,6 +8,7 @@ from pipeline.image_gen import ImageGenerator
 from pipeline.image_bank import generate_with_cache, save_to_bank
 from pipeline.video_gen import VideoGenerator
 from pipeline.tts_engine import TTSEngine
+from pipeline.music_gen import MusicGenerator
 from pipeline import editor
 
 logger = logging.getLogger("videobot")
@@ -15,6 +16,7 @@ logger = logging.getLogger("videobot")
 image_gen = ImageGenerator()
 video_gen = VideoGenerator()
 tts_engine = TTSEngine()
+music_gen = MusicGenerator()
 
 MUSIC_PATH = Path("assets/music/finance_background.mp3")
 
@@ -149,46 +151,65 @@ def generate_video(decision: VideoDecision, job_id: str) -> Path:
             editor.concat_clips(clip_paths, raw_video)
             _save_checkpoint(tmp, 3, image_paths=image_paths, clip_paths=clip_paths)
 
-        # ── Paso 4: TTS ──
-        narration_audio = tmp / "narration.wav"
+        # ── Paso 4: Generar música única para este vídeo ──
+        music_path = tmp / "music.wav"
         if start_step < 4:
-            logger.info(f"[{job_id}] Generando narracion TTS (CPU)...")
-            tts_engine.generate(decision.narration, narration_audio)
+            logger.info(f"[{job_id}] Generando musica de fondo (MusicGen)...")
+            music_gen.generate(
+                topic=decision.topic,
+                style=decision.style,
+                output_path=music_path,
+                duration_seconds=17,
+            )
             _save_checkpoint(tmp, 4, image_paths=image_paths, clip_paths=clip_paths)
 
-        # ── Paso 5: Mix audio ──
-        with_audio = tmp / "with_audio.mp4"
-        if start_step < 5:
-            logger.info(f"[{job_id}] Mezclando audio (CPU)...")
-            if MUSIC_PATH.exists():
-                editor.mix_audio(raw_video, narration_audio, MUSIC_PATH, with_audio)
-            else:
-                # Sin música de fondo — solo narración
-                logger.warning(f"[{job_id}] No hay música ({MUSIC_PATH}), solo narración")
-                editor.mix_audio_no_music(raw_video, narration_audio, with_audio)
-            _save_checkpoint(tmp, 5, image_paths=image_paths, clip_paths=clip_paths)
+        # ════════════════════════════════════════
+        # Generar 2 versiones: ES + EN
+        # Mismas imágenes/clips/música, distinta voz y subtítulos
+        # ════════════════════════════════════════
 
-        # ── Paso 6: Subtítulos ──
-        with_subs = tmp / "with_subs.mp4"
-        if start_step < 6:
-            logger.info(f"[{job_id}] Anadiendo subtitulos (CPU)...")
-            editor.burn_subtitles(with_audio, decision.narration, narration_audio, with_subs)
-            _save_checkpoint(tmp, 6, image_paths=image_paths, clip_paths=clip_paths)
+        results = {}
+        for lang, narration_text, voice, suffix in [
+            ("es", decision.narration, "ef_dora", "es"),
+            ("en", decision.narration_en, "af_sarah", "en"),
+        ]:
+            logger.info(f"[{job_id}] === Versión {lang.upper()} ===")
 
-        # ── Paso 7: Outro de marca ──
-        final = tmp / "final.mp4"
-        if start_step < 7:
-            logger.info(f"[{job_id}] Anadiendo outro @finanzasjpg (CPU)...")
-            editor.add_outro(with_subs, final)
-            _save_checkpoint(tmp, 7, image_paths=image_paths, clip_paths=clip_paths)
+            # TTS
+            narration_audio = tmp / f"narration_{suffix}.wav"
+            if not narration_audio.exists():
+                logger.info(f"[{job_id}] TTS {lang.upper()}...")
+                tts_engine.generate(narration_text, narration_audio, voice=voice)
 
-        # ── Paso 8: Mover a pending ──
-        output_path = Path(f"output/pending/{job_id}.mp4")
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(final, output_path)
+            # Mix audio (vídeo + narración + música)
+            with_audio = tmp / f"with_audio_{suffix}.mp4"
+            if not with_audio.exists():
+                logger.info(f"[{job_id}] Mix audio {lang.upper()}...")
+                editor.mix_audio(raw_video, narration_audio, music_path, with_audio)
 
-        logger.info(f"[{job_id}] Video generado: {output_path}")
-        return output_path
+            # Subtítulos
+            with_subs = tmp / f"with_subs_{suffix}.mp4"
+            if not with_subs.exists():
+                logger.info(f"[{job_id}] Subtitulos {lang.upper()}...")
+                editor.burn_subtitles(with_audio, narration_text, narration_audio, with_subs)
+
+            # Outro de marca
+            final = tmp / f"final_{suffix}.mp4"
+            if not final.exists():
+                logger.info(f"[{job_id}] Outro {lang.upper()}...")
+                editor.add_outro(with_subs, final)
+
+            results[suffix] = final
+
+        # ── Mover a pending ──
+        output_es = Path(f"output/pending/{job_id}_es.mp4")
+        output_en = Path(f"output/pending/{job_id}_en.mp4")
+        output_es.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(results["es"], output_es)
+        shutil.copy(results["en"], output_en)
+
+        logger.info(f"[{job_id}] Videos generados: {output_es} + {output_en}")
+        return output_es  # Retorna ES como principal
 
     except Exception:
         logger.info(f"[{job_id}] Error — checkpoint guardado para reanudar")

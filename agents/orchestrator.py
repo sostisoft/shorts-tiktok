@@ -7,8 +7,9 @@ from datetime import date
 @dataclass
 class VideoDecision:
     topic: str              # Tema concreto del vídeo (único, nunca repetido)
-    hook: str               # Primera frase — gancho 2 segundos
-    narration: str          # Guión completo para TTS (~40 palabras, 15s de lectura)
+    hook: str               # Primera frase — gancho 2 segundos (castellano)
+    narration: str          # Guión castellano para TTS (~40 palabras, 15s)
+    narration_en: str       # Guión inglés para TTS (~40 palabras, 15s)
     image_prompts: list     # 3 prompts en inglés para FLUX
     style: str              # Estilo visual ("cinematic office", "modern city", etc)
     duration_target: int    # Segundos objetivo (15)
@@ -61,12 +62,15 @@ TEMAS YA PUBLICADOS — PROHIBIDO repetir:
 {json.dumps(recent_topics, ensure_ascii=False) if recent_topics else '["(ninguno todavía)"]'}
 
 Decide el siguiente vídeo. EXACTAMENTE 15 segundos, ~40 palabras, 3 image prompts.
+Genera DOBLE guión: castellano (acento España) + inglés (acento americano).
+Ambos guiones deben transmitir el mismo mensaje pero adaptados culturalmente.
 
 JSON exacto:
 {{
   "topic": "título descriptivo ÚNICO",
   "hook": "frase gancho (máx 8 palabras)",
-  "narration": "guión de 15 segundos (~40 palabras) en castellano",
+  "narration": "guión de 15s (~40 palabras) en CASTELLANO de España",
+  "narration_en": "script 15s (~40 words) in American English",
   "image_prompts": ["prompt 1 inglés", "prompt 2 inglés", "prompt 3 inglés"],
   "style": "estilo visual",
   "duration_target": 15
@@ -105,12 +109,14 @@ Temas anteriores (para no repetir ángulo):
 
 Genera guión + prompts para EXACTAMENTE este tema.
 15 segundos, ~40 palabras de narración, 3 image prompts.
+Genera DOBLE guión: castellano (acento España) + inglés (acento americano).
 
 JSON exacto:
 {{
   "topic": "{topic}",
   "hook": "frase gancho (máx 8 palabras)",
-  "narration": "guión de 15 segundos (~40 palabras) en castellano",
+  "narration": "guión de 15s (~40 palabras) en CASTELLANO de España",
+  "narration_en": "script 15s (~40 words) in American English",
   "image_prompts": ["prompt 1 inglés", "prompt 2 inglés", "prompt 3 inglés"],
   "style": "estilo visual",
   "duration_target": 15
