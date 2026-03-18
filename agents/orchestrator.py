@@ -6,12 +6,12 @@ from datetime import date
 
 @dataclass
 class VideoDecision:
-    topic: str              # Tema concreto del vídeo
-    hook: str               # Primera frase — gancho 3 segundos
-    narration: str          # Guión completo para TTS (~200 palabras)
-    image_prompts: list     # 8-10 prompts en inglés para FLUX
+    topic: str              # Tema concreto del vídeo (único, nunca repetido)
+    hook: str               # Primera frase — gancho 2 segundos
+    narration: str          # Guión completo para TTS (~40 palabras, 15s de lectura)
+    image_prompts: list     # 3 prompts en inglés para FLUX
     style: str              # Estilo visual ("cinematic office", "modern city", etc)
-    duration_target: int    # Segundos objetivo (45-60)
+    duration_target: int    # Segundos objetivo (15)
 
 SYSTEM_PROMPT = """
 Eres el director de contenido de "Finanzas Claras", un canal de YouTube Shorts
@@ -22,67 +22,105 @@ Sin cara, sin cámara. Estilo documental moderno.
 
 TONO: Directo, cercano, sin tecnicismos. Como un amigo que sabe de finanzas.
 IDIOMA: Castellano neutro (sin modismos regionales)
-DURACIÓN: 45-60 segundos
+DURACIÓN: EXACTAMENTE 15 segundos. Ni más ni menos.
 
-TEMAS del canal (rotar, no repetir):
-- Fondos indexados y cómo empezar
-- Hipoteca fija vs variable
-- Plan de pensiones: sí o no
-- Cómo ahorrar el 20% del sueldo
-- ETFs para principiantes
-- Cuenta remunerada vs fondo monetario
-- Declaración de la renta: trucos legales
-- Regla del 50/30/20
-- Cómo salir de deudas
-- Inversión inmobiliaria vs bolsa
-- FIRE: jubilación anticipada
-- Broker: cómo elegir
-- Inflación y tu dinero
-- Diversificación de cartera
+REGLA CRÍTICA — NO REPETIR:
+Se te dará una lista de TODOS los temas ya publicados.
+NUNCA repitas un tema, ni un ángulo similar, ni una reformulación del mismo concepto.
 
-FORMATO DE GANCHO (primeros 3 segundos):
-- Pregunta que genera curiosidad: "¿Sabías que el 90% de los españoles pierde dinero por esto?"
-- Dato impactante: "Con 200€ al mes puedes jubilarte a los 50"
-- Afirmación provocadora: "Tu banco te está robando y no lo sabes"
+FORMATO DE GANCHO (primeros 2 segundos):
+- Pregunta corta que genera curiosidad
+- Dato impactante con número concreto
+- Afirmación provocadora
 
-IMAGEN PROMPTS: Escenas realistas, estilo cinematográfico.
-Personas en oficinas modernas, ciudades españolas, gráficos financieros,
-ordenadores con datos, vida de clase media-alta española.
+GUIÓN: Máximo 40 palabras. Debe leerse en exactamente 12-13 segundos a ritmo natural.
+Estructura: gancho (2s) → dato clave (8s) → cierre con CTA implícito (3s).
+
+IMAGEN PROMPTS: 3 escenas realistas, estilo cinematográfico.
 SIEMPRE en inglés, muy descriptivos (50-80 palabras cada uno).
+Deben ser visualmente distintas entre sí para dar dinamismo al vídeo.
 
 Responde ÚNICAMENTE en JSON sin backticks ni texto adicional.
 """
 
+TOPIC_PROMPT = """
+Se te da un TEMA CONCRETO elegido por el creador del canal.
+Tu trabajo es SOLO generar el guión, gancho e image prompts para ese tema.
+NO elijas otro tema. Trabaja exclusivamente con el que se te da.
+"""
+
+
 def decide(recent_topics: list[str]) -> VideoDecision:
+    """Claude elige tema libremente (modo automático)."""
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
     user_msg = f"""
 Hoy es {date.today().strftime('%A %d de %B de %Y')}.
 
-Temas publicados recientemente (NO repetir):
-{json.dumps(recent_topics, ensure_ascii=False)}
+TEMAS YA PUBLICADOS — PROHIBIDO repetir:
+{json.dumps(recent_topics, ensure_ascii=False) if recent_topics else '["(ninguno todavía)"]'}
 
-Decide el siguiente vídeo para Finanzas Claras.
+Decide el siguiente vídeo. EXACTAMENTE 15 segundos, ~40 palabras, 3 image prompts.
 
-Responde con este JSON exacto:
+JSON exacto:
 {{
-  "topic": "título descriptivo del tema",
-  "hook": "primera frase gancho (máx 15 palabras)",
-  "narration": "guión completo de 45-60 segundos de lectura en castellano",
-  "image_prompts": [
-    "prompt 1 en inglés, muy descriptivo, estilo cinematográfico...",
-    "prompt 2...",
-    "... hasta 8 prompts"
-  ],
-  "style": "descripción del estilo visual general",
-  "duration_target": 55
+  "topic": "título descriptivo ÚNICO",
+  "hook": "frase gancho (máx 8 palabras)",
+  "narration": "guión de 15 segundos (~40 palabras) en castellano",
+  "image_prompts": ["prompt 1 inglés", "prompt 2 inglés", "prompt 3 inglés"],
+  "style": "estilo visual",
+  "duration_target": 15
 }}
 """
 
     msg = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=2000,
+        max_tokens=1500,
         system=SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": user_msg}]
+    )
+
+    raw = msg.content[0].text.strip()
+    data = json.loads(raw)
+    return VideoDecision(**data)
+
+
+def decide_from_topic(topic: str, enfoque: str = None, recent_topics: list[str] = None) -> VideoDecision:
+    """Claude genera guión + metadata a partir de un tema dado por el usuario."""
+    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+
+    tema_desc = topic
+    if enfoque:
+        tema_desc += f" (enfoque: {enfoque})"
+
+    recent = recent_topics or []
+
+    user_msg = f"""
+Hoy es {date.today().strftime('%A %d de %B de %Y')}.
+
+TEMA ASIGNADO (NO cambiar): {tema_desc}
+
+Temas anteriores (para no repetir ángulo):
+{json.dumps(recent, ensure_ascii=False) if recent else '[]'}
+
+Genera guión + prompts para EXACTAMENTE este tema.
+15 segundos, ~40 palabras de narración, 3 image prompts.
+
+JSON exacto:
+{{
+  "topic": "{topic}",
+  "hook": "frase gancho (máx 8 palabras)",
+  "narration": "guión de 15 segundos (~40 palabras) en castellano",
+  "image_prompts": ["prompt 1 inglés", "prompt 2 inglés", "prompt 3 inglés"],
+  "style": "estilo visual",
+  "duration_target": 15
+}}
+"""
+
+    msg = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=1500,
+        system=SYSTEM_PROMPT + "\n" + TOPIC_PROMPT,
         messages=[{"role": "user", "content": user_msg}]
     )
 

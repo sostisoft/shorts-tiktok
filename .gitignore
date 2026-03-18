@@ -11,6 +11,7 @@ __pycache__/
 credentials/
 *.json
 !.env.example
+!assets/image-bank/index.json
 
 # Models (too large for git)
 models/wan21/
