@@ -85,6 +85,15 @@ TMP_DIR=output/tmp
 OUTPUT_DIR=output/published
 PENDING_DIR=output/pending
 DB_PATH=db/videobot.db
+
+# TikTok
+TIKTOK_ACCESS_TOKEN=
+TIKTOK_CLIENT_KEY=
+TIKTOK_CLIENT_SECRET=
+
+# Instagram (Meta Graph API)
+INSTAGRAM_USER_ID=
+INSTAGRAM_ACCESS_TOKEN=
 EOF
 
 cp .env.example .env

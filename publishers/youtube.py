@@ -50,25 +50,23 @@ def _get_service():
     return build("youtube", "v3", credentials=creds)
 
 
-def publish(
+def _upload(
     video_path: Path,
     title: str,
     description: str,
     tags: list[str],
+    privacy: str = "public",
 ) -> PublishResult:
     """
-    Sube un vídeo a YouTube como Short.
+    Sube un vídeo a YouTube.
+    privacy: "public", "unlisted", "private"
 
     CUOTA: cada upload cuesta 1.600 unidades.
     Con 10.000 unidades/día → máximo 6 vídeos/día.
-    El bot usa 2/día → sin problema.
+    El bot usa 4/día (2 shorts + 2 backups) → sin problema.
     """
     try:
         service = _get_service()
-
-        # Asegurar que tiene #shorts en descripción
-        if "#shorts" not in description.lower():
-            description += "\n\n#shorts"
 
         body = {
             "snippet": {
@@ -80,7 +78,7 @@ def publish(
                 "defaultAudioLanguage": "es",
             },
             "status": {
-                "privacyStatus": "public",
+                "privacyStatus": privacy,
                 "selfDeclaredMadeForKids": False,
                 "madeForKids": False,
             }
@@ -93,7 +91,8 @@ def publish(
             chunksize=5 * 1024 * 1024  # 5MB chunks
         )
 
-        logger.info(f"Subiendo a YouTube: {title}")
+        label = "Short" if privacy == "public" else "backup"
+        logger.info(f"YouTube ({label}): subiendo '{title}'")
         request = service.videos().insert(
             part="snippet,status",
             body=body,
@@ -105,11 +104,11 @@ def publish(
             status, response = request.next_chunk()
             if status:
                 progress = int(status.progress() * 100)
-                logger.info(f"  Progreso: {progress}%")
+                logger.info(f"  YouTube ({label}): {progress}%")
 
         video_id = response["id"]
-        url = f"https://youtube.com/shorts/{video_id}"
-        logger.info(f"Publicado: {url}")
+        url = f"https://youtube.com/shorts/{video_id}" if privacy == "public" else f"https://youtube.com/watch?v={video_id}"
+        logger.info(f"YouTube ({label}): publicado {url}")
 
         return PublishResult(
             success=True,
@@ -119,10 +118,33 @@ def publish(
         )
 
     except Exception as e:
-        logger.error(f"Error publicando en YouTube: {e}")
+        logger.error(f"YouTube ({privacy}): error - {e}")
         return PublishResult(
             success=False,
             video_id=None,
             url=None,
             error=str(e)
         )
+
+
+def publish(
+    video_path: Path,
+    title: str,
+    description: str,
+    tags: list[str],
+) -> PublishResult:
+    """Sube un vídeo a YouTube Shorts (público, con #shorts)."""
+    if "#shorts" not in description.lower():
+        description += "\n\n#shorts"
+    return _upload(video_path, title, description, tags, privacy="public")
+
+
+def publish_backup(
+    video_path: Path,
+    title: str,
+    description: str,
+    tags: list[str],
+) -> PublishResult:
+    """Sube el vídeo a YouTube normal como privado (almacén/backup)."""
+    backup_title = f"[BACKUP] {title}"
+    return _upload(video_path, backup_title, description, tags, privacy="private")
