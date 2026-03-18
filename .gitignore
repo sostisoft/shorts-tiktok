@@ -1,0 +1,37 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment
+.env
+
+# Credentials (NEVER commit)
+credentials/
+*.json
+!.env.example
+
+# Models (too large for git)
+models/wan21/
+models/flux/
+models/kokoro/
+*.safetensors
+*.onnx
+*.bin
+
+# Output
+output/
+logs/
+db/*.db
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Huggingface cache
+.cache/

@@ -1,0 +1,15 @@
+[Unit]
+Description=VideoBot Finanzas Claras
+After=network.target
+
+[Service]
+Type=simple
+User=gmktec
+WorkingDirectory=/home/gmktec/shorts
+ExecStart=/home/gmktec/shorts/venv/bin/python main.py
+Restart=always
+RestartSec=30
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
