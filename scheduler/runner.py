@@ -1,385 +1,316 @@
-import uuid
-import time
+"""
+scheduler/runner.py
+Orquestador principal del pipeline.
+Conecta: ScriptAgent → ImageGen → VideoGen → TTS → MusicGen → Composer → DB → Publisher
+
+Funciones llamadas desde main.py:
+- generate_only()         → genera un vídeo y lo guarda en output/pending/
+- publish_only()          → publica el siguiente vídeo pendiente en YouTube
+- night_generation_loop() → genera vídeos en bucle entre 00:00 y 06:00
+- run_job()               → genera + publica inmediatamente (test)
+"""
 import logging
+import os
 import shutil
+import time
+import uuid
+from datetime import datetime, time as dtime
 from pathlib import Path
-from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from dotenv import load_dotenv
-from zoneinfo import ZoneInfo
 
-load_dotenv()
+from agents.script_agent import ScriptAgent
+from db.models import Session, Video, VideoStatus
+from pipeline.composer import VideoComposer
+from pipeline.image_gen import ImageGenerator
+from pipeline.music_gen import MusicGenerator
+from pipeline.tts import TTSGenerator
+from pipeline.video_generator import VideoGenerator
+from publishers.youtube_publisher import YouTubePublisher
 
-from agents.orchestrator import decide, decide_from_topic
-from agents.metadata_gen import generate as gen_metadata, generate_en as gen_metadata_en
-from pipeline.runner import generate_video
-from publishers.youtube import publish as yt_publish, publish_backup as yt_backup
-from publishers.instagram import publish as ig_publish
-from publishers.tiktok import publish as tt_publish
-from db.models import (
-    init_db, get_recent_topics, get_pending_topics,
-    mark_topic_used, save_video, update_status, update_metadata,
-    get_oldest_generated,
-)
+logger = logging.getLogger("videobot.runner")
 
-logger = logging.getLogger("videobot")
+OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", "output"))
+PENDING_DIR = OUTPUT_DIR / "pending"
+PUBLISHED_DIR = OUTPUT_DIR / "published"
 
-MADRID_TZ = ZoneInfo("Europe/Madrid")
+# Ventana de generación nocturna
+NIGHT_START = dtime(0, 0)
+NIGHT_END = dtime(6, 0)
 
-
-def _publish_all(video_path: Path, title: str, description: str, tags: list[str]) -> dict:
-    """Publica en 4 plataformas en paralelo."""
-    results = {}
-
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        futures = {
-            executor.submit(yt_backup, video_path, title, description, tags): "yt_backup",
-            executor.submit(yt_publish, video_path, title, description, tags): "yt_shorts",
-            executor.submit(ig_publish, video_path, title, description, tags): "instagram",
-            executor.submit(tt_publish, video_path, title, description, tags): "tiktok",
-        }
-
-        for future in as_completed(futures):
-            platform = futures[future]
-            try:
-                result = future.result()
-                results[platform] = result
-                if result.success:
-                    logger.info(f"  {platform}: OK")
-                else:
-                    logger.warning(f"  {platform}: FALLÓ - {result.error}")
-            except Exception as e:
-                logger.error(f"  {platform}: EXCEPCIÓN - {e}")
-                results[platform] = type("Result", (), {
-                    "success": False, "error": str(e),
-                    "video_id": None, "url": None,
-                    "publish_id": None, "media_id": None,
-                })()
-
-    return results
+# Máximo de vídeos por ciclo nocturno (para no saturar la cuota YouTube)
+MAX_VIDEOS_PER_NIGHT = int(os.getenv("MAX_VIDEOS_PER_NIGHT", "6"))
 
 
-def _decide_topic(job_id: str) -> tuple:
-    """
-    Decide el tema del vídeo. Prioridad:
-    1. Temas manuales pendientes en la DB (puestos por el usuario)
-    2. Claude elige automáticamente
+# ── API pública (llamada desde main.py) ───────────────────────────────────────
 
-    Devuelve (decision, topic_id_or_none)
-    """
-    recent = get_recent_topics(limit=50)
-
-    # 1. Buscar temas manuales pendientes
-    pending = get_pending_topics()
-    if pending:
-        topic_entry = pending[0]
-        logger.info(f"[{job_id}] Tema manual: '{topic_entry['tema']}' (prioridad: {topic_entry['prioridad']})")
-        decision = decide_from_topic(
-            topic=topic_entry["tema"],
-            enfoque=topic_entry.get("enfoque"),
-            recent_topics=recent,
-        )
-        return decision, topic_entry["id"]
-
-    # 2. Claude elige libremente
-    logger.info(f"[{job_id}] Sin temas manuales — Claude decide")
-    decision = decide(recent)
-    return decision, None
-
-
-# ═══════════════════════════════════════
-# generate_only: genera vídeo sin publicar
-# ═══════════════════════════════════════
-
-def generate_only():
-    """
-    Genera un vídeo completo (ES + EN) y lo guarda en output/pending/.
-    NO publica. Actualiza DB con status='generated'.
-
-    Retorna job_id si se generó, None si no había temas.
-    """
-    init_db()
-    job_id = str(uuid.uuid4())[:8]
-    logger.info(f"{'='*50}")
-    logger.info(f"[{job_id}] Iniciando generación (sin publicar)")
-
+def generate_only() -> str | None:
+    """Genera un vídeo y lo registra en DB como pendiente. Devuelve el job_id."""
     try:
-        # ── FASE 1/6: Decidir tema (Claude API) ──
-        logger.info(f"[{job_id}] ▶ FASE 1/6: Decidiendo tema...")
-        decision, topic_id = _decide_topic(job_id)
-        logger.info(f"[{job_id}] ✓ FASE 1/6: Tema: {decision.topic}")
-        logger.info(f"[{job_id}]   Hook: {decision.hook}")
-
-        # Marcar tema manual como usado
-        if topic_id:
-            mark_topic_used(topic_id, job_id)
-
-        # Guardar en DB con status pending
-        save_video(
-            job_id=job_id,
-            topic=decision.topic,
-            hook=decision.hook,
-            narration=decision.narration,
-            title="",
-            tags=[]
-        )
-        update_metadata(job_id, narration_en=decision.narration_en)
-
-        # ── FASE 2/6: Generar vídeo (GPU + CPU) ──
-        logger.info(f"[{job_id}] ▶ FASE 2/6: Generando vídeo (FLUX + Wan2.1 + TTS + ffmpeg)...")
-        update_status(job_id, "generating")
-        start_time = time.time()
-        video_path = generate_video(decision, job_id)
-        gen_seconds = int(time.time() - start_time)
-        logger.info(f"[{job_id}] ✓ FASE 2/6: Vídeo generado en {gen_seconds}s ({gen_seconds//60}m {gen_seconds%60}s)")
-
-        # ── FASE 3/6: Metadata ES (Claude API) ──
-        logger.info(f"[{job_id}] ▶ FASE 3/6: Generando metadata ES...")
-        metadata_es = gen_metadata(decision.topic, decision.hook, decision.narration)
-        logger.info(f"[{job_id}] ✓ FASE 3/6: Título ES: {metadata_es.title}")
-
-        # ── FASE 4/6: Metadata EN (Claude API) ──
-        logger.info(f"[{job_id}] ▶ FASE 4/6: Generando metadata EN...")
-        metadata_en = gen_metadata_en(decision.topic, decision.hook, decision.narration_en)
-        logger.info(f"[{job_id}] ✓ FASE 4/6: Título EN: {metadata_en.title}")
-
-        # ── FASE 5/6: Guardar metadata en DB ──
-        logger.info(f"[{job_id}] ▶ FASE 5/6: Guardando en base de datos...")
-        update_metadata(
-            job_id,
-            title=metadata_es.title,
-            description=metadata_es.description,
-            tags=metadata_es.tags,
-            title_en=metadata_en.title,
-            description_en=metadata_en.description,
-            tags_en=metadata_en.tags,
-            generation_time_s=gen_seconds,
-        )
-        update_status(job_id, "generated")
-        logger.info(f"[{job_id}] ✓ FASE 5/6: DB actualizada")
-
-        # ── FASE 6/6: Verificar ficheros ──
-        es_path = Path(f"output/pending/{job_id}_es.mp4")
-        en_path = Path(f"output/pending/{job_id}_en.mp4")
-        if not es_path.exists() or not en_path.exists():
-            raise FileNotFoundError(f"Vídeos no encontrados: {es_path}, {en_path}")
-
-        logger.info(f"[{job_id}] ✓ FASE 6/6: Vídeo listo para publicar")
-        logger.info(f"[{job_id}]   ES: {es_path}")
-        logger.info(f"[{job_id}]   EN: {en_path}")
-        logger.info(f"[{job_id}] ════ GENERACIÓN COMPLETADA ({gen_seconds//60}m {gen_seconds%60}s) ════")
+        job_id = _run_generation_pipeline()
         return job_id
-
     except Exception as e:
-        logger.exception(f"[{job_id}] Error en generación: {e}")
-        update_status(job_id, "failed", error=str(e))
+        logger.error(f"generate_only falló: {e}", exc_info=True)
         return None
 
 
-# ═══════════════════════════════════════
-# publish_only: publica vídeo pre-generado
-# ═══════════════════════════════════════
-
-def publish_only():
-    """
-    Publica el vídeo más antiguo con status='generated'.
-    Publica versión ES y EN en 4 plataformas cada una (en paralelo).
-    Actualiza DB con status='success' o 'failed'.
-    Borra local si backup YouTube OK.
-    """
-    init_db()
-    video = get_oldest_generated()
-    if not video:
-        logger.info("No hay vídeos generados pendientes de publicar")
-        return None
-
-    job_id = video["job_id"]
-    logger.info(f"{'='*50}")
-    logger.info(f"[{job_id}] Publicando vídeo pre-generado: {video['topic']}")
-
-    es_path = Path(f"output/pending/{job_id}_es.mp4")
-    en_path = Path(f"output/pending/{job_id}_en.mp4")
-
-    if not es_path.exists():
-        logger.error(f"[{job_id}] Fichero ES no encontrado: {es_path}")
-        update_status(job_id, "failed", error=f"Fichero no encontrado: {es_path}")
-        return None
-
+def publish_only() -> str | None:
+    """Publica el siguiente vídeo pendiente en YouTube. Devuelve el job_id publicado."""
     try:
-        # ── Publicar versión ES ──
-        title_es = video.get("title") or video["topic"]
-        desc_es = video.get("description") or ""
-        tags_es = video.get("tags") or []
-
-        logger.info(f"[{job_id}] Publicando ES en 4 plataformas...")
-        results_es = _publish_all(
-            video_path=es_path,
-            title=title_es,
-            description=desc_es,
-            tags=tags_es,
-        )
-
-        # ── Publicar versión EN ──
-        results_en = {}
-        if en_path.exists():
-            title_en = video.get("title_en") or title_es
-            desc_en = video.get("description_en") or desc_es
-            tags_en = video.get("tags_en") or tags_es
-
-            logger.info(f"[{job_id}] Publicando EN en 4 plataformas...")
-            results_en = _publish_all(
-                video_path=en_path,
-                title=title_en,
-                description=desc_en,
-                tags=tags_en,
-            )
-        else:
-            logger.warning(f"[{job_id}] Fichero EN no encontrado, solo se publica ES")
-
-        # ── Evaluar resultados ES ──
-        yt_shorts_es = results_es.get("yt_shorts")
-        yt_bk_es = results_es.get("yt_backup")
-        ig_es = results_es.get("instagram")
-        tt_es = results_es.get("tiktok")
-
-        # ── Evaluar resultados EN ──
-        yt_shorts_en = results_en.get("yt_shorts")
-        yt_bk_en = results_en.get("yt_backup")
-        ig_en = results_en.get("instagram")
-        tt_en = results_en.get("tiktok")
-
-        any_success = any(r.success for r in results_es.values())
-        if results_en:
-            any_success = any_success or any(r.success for r in results_en.values())
-
-        if any_success:
-            # ES URLs
-            yt_id = yt_shorts_es.video_id if yt_shorts_es and yt_shorts_es.success else None
-            yt_url = yt_shorts_es.url if yt_shorts_es and yt_shorts_es.success else None
-            yt_backup_url = yt_bk_es.url if yt_bk_es and yt_bk_es.success else None
-
-            ig_url = None
-            if ig_es and ig_es.success and hasattr(ig_es, 'media_id') and ig_es.media_id:
-                ig_url = f"https://www.instagram.com/reel/{ig_es.media_id}/"
-
-            tiktok_url = None
-            if tt_es and tt_es.success:
-                publish_id = getattr(tt_es, 'publish_id', None)
-                if publish_id:
-                    tiktok_url = f"https://www.tiktok.com/@finanzasjpg/video/{publish_id}"
-
-            # EN URLs
-            yt_url_en = yt_shorts_en.url if yt_shorts_en and yt_shorts_en.success else None
-
-            ig_url_en = None
-            if ig_en and ig_en.success and hasattr(ig_en, 'media_id') and ig_en.media_id:
-                ig_url_en = f"https://www.instagram.com/reel/{ig_en.media_id}/"
-
-            tiktok_url_en = None
-            if tt_en and tt_en.success:
-                publish_id_en = getattr(tt_en, 'publish_id', None)
-                if publish_id_en:
-                    tiktok_url_en = f"https://www.tiktok.com/@finanzasjpg/video/{publish_id_en}"
-
-            update_status(
-                job_id, "success", yt_id, yt_url,
-                ig_url=ig_url,
-                tiktok_url=tiktok_url,
-                yt_backup_url=yt_backup_url,
-                yt_url_en=yt_url_en,
-                ig_url_en=ig_url_en,
-                tiktok_url_en=tiktok_url_en,
-                description=video.get("description"),
-            )
-
-            # Log resultados
-            for platform, result in results_es.items():
-                st = "OK" if result.success else f"FAIL: {result.error}"
-                logger.info(f"[{job_id}]   ES {platform}: {st}")
-            for platform, result in results_en.items():
-                st = "OK" if result.success else f"FAIL: {result.error}"
-                logger.info(f"[{job_id}]   EN {platform}: {st}")
-
-            # Borrar locales si backup OK
-            if yt_bk_es and yt_bk_es.success:
-                es_path.unlink(missing_ok=True)
-                logger.info(f"[{job_id}] ES local borrado (backup: {yt_bk_es.url})")
-
-            if yt_bk_en and yt_bk_en.success:
-                en_path.unlink(missing_ok=True)
-                logger.info(f"[{job_id}] EN local borrado (backup: {yt_bk_en.url})")
-
-            if not (yt_bk_es and yt_bk_es.success):
-                logger.warning(f"[{job_id}] Backup ES falló — conservado en {es_path}")
-            if not (yt_bk_en and yt_bk_en.success):
-                logger.warning(f"[{job_id}] Backup EN falló — conservado en {en_path}")
-
-            logger.info(f"[{job_id}] Publicación completada")
-            return job_id
-        else:
-            errors_es = "; ".join(f"ES {p}: {r.error}" for p, r in results_es.items())
-            errors_en = "; ".join(f"EN {p}: {r.error}" for p, r in results_en.items())
-            all_errors = f"{errors_es}; {errors_en}".strip("; ")
-            update_status(job_id, "failed", error=all_errors)
-            logger.error(f"[{job_id}] Todas las plataformas fallaron: {all_errors}")
-            return None
-
+        return _publish_next_pending()
     except Exception as e:
-        logger.exception(f"[{job_id}] Error en publicación: {e}")
-        update_status(job_id, "failed", error=str(e))
+        logger.error(f"publish_only falló: {e}", exc_info=True)
         return None
 
-
-# ═══════════════════════════════════════
-# night_generation_loop: genera vídeos de 00:00 a 06:00
-# ═══════════════════════════════════════
 
 def night_generation_loop():
-    """
-    Genera vídeos en bucle desde medianoche hasta las 06:00 (Madrid).
-    Cada vídeo tarda ~30-60 min en CPU.
-    Se detiene cuando:
-    - Son las 06:00 o más
-    - No quedan temas pendientes y Claude no puede decidir
-    """
-    logger.info("=" * 50)
-    logger.info("Iniciando generación nocturna (00:00-06:00)")
-
+    """Genera vídeos en bucle mientras estemos dentro de la ventana nocturna."""
+    logger.info("Iniciando bucle de generación nocturna...")
     count = 0
-    while True:
-        # Comprobar hora Madrid
-        now_madrid = datetime.now(MADRID_TZ)
-        if now_madrid.hour >= 6:
-            logger.info(f"Son las {now_madrid.strftime('%H:%M')} — fin de generación nocturna")
-            break
-
-        logger.info(f"Hora Madrid: {now_madrid.strftime('%H:%M')} — generando vídeo #{count + 1}")
-
-        try:
-            job_id = generate_only()
-            if job_id:
-                count += 1
-                logger.info(f"Vídeo #{count} generado: {job_id}")
-            else:
-                logger.info("No se pudo generar vídeo — parando generación nocturna")
-                break
-        except Exception as e:
-            logger.exception(f"Error en generación nocturna: {e}")
-            # Esperar 5 min antes de reintentar tras error
+    while _in_night_window() and count < MAX_VIDEOS_PER_NIGHT:
+        logger.info(f"Vídeo nocturno {count + 1}/{MAX_VIDEOS_PER_NIGHT}")
+        job_id = generate_only()
+        if job_id:
+            count += 1
+            logger.info(f"Vídeo {count} generado: {job_id}")
+        else:
+            logger.error("Generación falló, esperando 5 min antes de reintentar...")
             time.sleep(300)
 
-    logger.info(f"Generación nocturna finalizada: {count} vídeos generados")
+    logger.info(f"Bucle nocturno terminado: {count} vídeos generados")
 
-
-# ═══════════════════════════════════════
-# run_job: ciclo completo (legacy, para compatibilidad)
-# ═══════════════════════════════════════
 
 def run_job():
-    """
-    Ciclo completo legacy: genera + publica.
-    Mantenido para compatibilidad con entrada manual.
-    """
+    """Genera + publica inmediatamente (modo test / ejecución manual)."""
     job_id = generate_only()
     if job_id:
         publish_only()
+    else:
+        logger.error("run_job: la generación falló, no se puede publicar")
+
+
+# ── Pipeline de generación ────────────────────────────────────────────────────
+
+def _run_generation_pipeline(topic: str | None = None) -> str:
+    """
+    Pipeline completo: guión → imágenes → video IA → TTS → música → compositing → DB.
+    Devuelve el job_id del vídeo generado.
+    """
+    job_id = str(uuid.uuid4())[:8]
+    work_dir = OUTPUT_DIR / "tmp" / job_id
+    work_dir.mkdir(parents=True, exist_ok=True)
+    t_total = time.time()
+
+    logger.info(f"═══ Iniciando pipeline [{job_id}] ═══")
+
+    # ── 1. Guión ─────────────────────────────────────────────────────────────
+    logger.info("[1/6] Generando guión...")
+    agent = ScriptAgent()
+    script = agent.generate(topic=topic)
+    title = script["title"]
+    description = script.get("description", title)
+    narration = script["narration"]
+    scenes = script["scenes"]           # lista de {text, image_prompt}
+    tags = script.get("tags", [])
+
+    logger.info(f"  Título: {title}")
+    logger.info(f"  Escenas: {len(scenes)}")
+
+    # ── 2. Imágenes (FLUX Schnell) — batch para una sola carga del modelo ────
+    logger.info("[2/6] Generando imágenes de fondo con FLUX Schnell...")
+    image_gen = ImageGenerator(model="schnell")
+    image_prompts = [s["image_prompt"] for s in scenes]
+    image_paths = image_gen.generate_batch(
+        prompts=image_prompts,
+        output_dir=work_dir / "images",
+        width=576,      # ancho base: se escala a 1080 en FFmpeg
+        height=1024,    # alto base: se escala a 1920 en FFmpeg
+        steps=4,
+    )
+    logger.info(f"  {len(image_paths)} imágenes generadas")
+
+    # ── 3. TTS en paralelo con el inicio de la generación de video ────────────
+    # (TTS es CPU, no compite con GPU)
+    logger.info("[3/6] Generando voz TTS (CPU)...")
+    tts = TTSGenerator()
+    voice_path = tts.generate(
+        text=narration,
+        output_path=work_dir / "voice.wav",
+    )
+    voice_duration = tts.get_duration(voice_path)
+    logger.info(f"  Voz generada: {voice_duration:.1f}s")
+
+    # ── 4. Video IA (Wan2GP I2V + Self-Forcing LoRA) ─────────────────────────
+    logger.info("[4/6] Animando imágenes con Wan2GP I2V (Self-Forcing 2 steps)...")
+    video_gen = VideoGenerator(
+        model="wan_i2v_1.3B",
+        lora="self_forcing",
+        steps=2,
+        fps=16,
+        width=480,
+        height=832,
+        duration_seconds=5.0,
+    )
+    # Prompts de movimiento para cada escena
+    motion_prompts = _build_motion_prompts(scenes)
+    clip_paths = video_gen.animate_batch(
+        images=image_paths,
+        prompts=motion_prompts,
+        output_dir=work_dir / "clips",
+    )
+    logger.info(f"  {len(clip_paths)} clips de video generados")
+
+    # ── 5. Música de fondo ───────────────────────────────────────────────────
+    logger.info("[5/6] Generando música de fondo con MusicGen...")
+    music_gen = MusicGenerator()
+    music_path = music_gen.generate(
+        duration_seconds=voice_duration + 3,
+        output_path=work_dir / "music.wav",
+    )
+
+    # ── 6. Compositing final ─────────────────────────────────────────────────
+    logger.info("[6/6] Compositing final con FFmpeg...")
+    composer = VideoComposer()
+    subtitle_segments = VideoComposer.build_subtitle_segments_from_script(
+        script_lines=[s["text"] for s in scenes],
+        total_duration=voice_duration,
+    )
+
+    final_path = PENDING_DIR / f"{job_id}.mp4"
+    PENDING_DIR.mkdir(parents=True, exist_ok=True)
+
+    composer.compose(
+        clips=clip_paths,
+        audio_voice=voice_path,
+        audio_music=music_path,
+        subtitles=subtitle_segments,
+        output_path=final_path,
+        target_duration=voice_duration + 1,
+    )
+
+    # ── 7. Registrar en DB ───────────────────────────────────────────────────
+    _save_to_db(
+        job_id=job_id,
+        title=title,
+        description=description,
+        tags=tags,
+        video_path=final_path,
+        script=script,
+    )
+
+    elapsed = time.time() - t_total
+    logger.info(f"═══ Pipeline [{job_id}] completado en {elapsed/60:.1f} min ═══")
+    logger.info(f"  → {final_path}")
+
+    # Limpiar directorio temporal
+    shutil.rmtree(work_dir, ignore_errors=True)
+
+    return job_id
+
+
+# ── Pipeline de publicación ───────────────────────────────────────────────────
+
+def _publish_next_pending() -> str | None:
+    """Publica el siguiente vídeo de la cola pending en YouTube."""
+    with Session() as session:
+        video = (
+            session.query(Video)
+            .filter(Video.status == VideoStatus.PENDING)
+            .order_by(Video.created_at)
+            .first()
+        )
+        if video is None:
+            logger.info("No hay vídeos pendientes para publicar")
+            return None
+
+        video_path = Path(video.video_path)
+        if not video_path.exists():
+            logger.error(f"Vídeo no encontrado en disco: {video_path}")
+            video.status = VideoStatus.ERROR
+            video.error_message = "Fichero no encontrado en disco"
+            session.commit()
+            return None
+
+        logger.info(f"Publicando vídeo: {video.job_id} — {video.title}")
+        publisher = YouTubePublisher()
+        try:
+            yt_id = publisher.upload(
+                video_path=video_path,
+                title=video.title,
+                description=video.description,
+                tags=video.tags.split(",") if video.tags else [],
+            )
+            video.status = VideoStatus.PUBLISHED
+            video.youtube_id = yt_id
+            video.published_at = datetime.utcnow()
+            session.commit()
+
+            # Mover a carpeta published
+            dest = PUBLISHED_DIR / video_path.name
+            PUBLISHED_DIR.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(video_path), str(dest))
+            video.video_path = str(dest)
+            session.commit()
+
+            logger.info(f"Publicado en YouTube: https://youtube.com/watch?v={yt_id}")
+            return video.job_id
+
+        except Exception as e:
+            logger.error(f"Error al publicar {video.job_id}: {e}")
+            video.status = VideoStatus.ERROR
+            video.error_message = str(e)[:500]
+            session.commit()
+            # No mover el fichero — quedará en pending para reintentar
+            return None
+
+
+# ── Utilidades internas ───────────────────────────────────────────────────────
+
+def _build_motion_prompts(scenes: list[dict]) -> list[str]:
+    """
+    Genera prompts de movimiento para Wan2GP I2V.
+    Wan2.1 I2V funciona mejor con prompts descriptivos del movimiento de cámara.
+    """
+    motion_templates = [
+        "slow camera zoom in, smooth motion, cinematic, professional",
+        "gentle camera pan left, particles floating, atmospheric light",
+        "slow dolly forward, depth of field blur, cinematic movement",
+        "subtle camera shake, dynamic, energetic, professional video",
+        "slow zoom out revealing scene, smooth cinematic movement",
+    ]
+    prompts = []
+    for i, scene in enumerate(scenes):
+        # Combinar el contexto de la escena con el movimiento de cámara
+        base_motion = motion_templates[i % len(motion_templates)]
+        scene_context = scene.get("image_prompt", "")[:100]
+        prompts.append(f"{scene_context}, {base_motion}")
+    return prompts
+
+
+def _save_to_db(
+    job_id: str,
+    title: str,
+    description: str,
+    tags: list[str],
+    video_path: Path,
+    script: dict,
+):
+    """Registra el vídeo generado en SQLite."""
+    import json as json_lib
+    with Session() as session:
+        video = Video(
+            job_id=job_id,
+            title=title,
+            description=description,
+            tags=",".join(tags),
+            video_path=str(video_path),
+            script_json=json_lib.dumps(script, ensure_ascii=False),
+            status=VideoStatus.PENDING,
+            created_at=datetime.utcnow(),
+        )
+        session.add(video)
+        session.commit()
+        logger.info(f"Vídeo registrado en DB: {job_id}")
+
+
+def _in_night_window() -> bool:
+    now = datetime.now().time()
+    return NIGHT_START <= now < NIGHT_END

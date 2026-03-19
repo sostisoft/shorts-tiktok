@@ -1,22 +1,46 @@
+# ─── Core ───────────────────────────────────────────────────────────────────
 anthropic>=0.40.0
 apscheduler>=3.10.0
 sqlalchemy>=2.0.0
 pyyaml>=6.0
 python-dotenv>=1.0.0
 requests>=2.31.0
-diffusers>=0.30.0
+
+# ─── AI / modelos ───────────────────────────────────────────────────────────
+# PyTorch: instalar ANTES con el índice TheRock gfx1151:
+#   pip install --pre torch torchaudio torchvision rocm[devel] \
+#     --index-url https://rocm.nightlies.amd.com/v2/gfx1151/
+
+# diffusers: SOLO para FLUX imagen (no para video — Wan2GP lo gestiona aparte)
+diffusers>=0.32.0
 transformers>=4.44.0
 accelerate>=0.33.0
 sentencepiece
 protobuf
-opencv-python-headless
+huggingface-hub>=0.24.0
+ftfy
+safetensors
+
+# TTS
+chatterbox-tts>=0.1.0
+soundfile
+numpy>=1.26.0
+
+# Música
+audiocraft>=1.3.0
+
+# ─── Video / imagen ──────────────────────────────────────────────────────────
+opencv-python-headless>=4.8.0
 Pillow>=10.0.0
 imagehash>=4.3.0
+pysubs2>=1.6.0          # Subtítulos ASS
+scipy                   # Para audio processing
+
+# ─── YouTube API ─────────────────────────────────────────────────────────────
 google-api-python-client>=2.100.0
 google-auth-httplib2>=0.2.0
 google-auth-oauthlib>=1.1.0
-kokoro>=0.9.4
-soundfile
-numpy
-huggingface-hub
-ftfy
+
+# ─── Utilidades ──────────────────────────────────────────────────────────────
+rich>=13.0.0            # Logging bonito en terminal
+psutil                  # Monitorizar memoria

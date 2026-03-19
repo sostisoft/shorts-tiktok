@@ -1,123 +1,123 @@
+"""
+pipeline/image_gen.py
+Generador de imágenes con FLUX.1-schnell via diffusers.
+- pipe.to("cuda") siempre — memoria UMA, nunca cpu_offload
+- Descarga el modelo tras cada uso para liberar GTT a Wan2GP
+"""
 import gc
+import logging
 import os
+from pathlib import Path
+
 import torch
 from diffusers import FluxPipeline
-from pathlib import Path
+from PIL import Image
+
+logger = logging.getLogger("videobot.image_gen")
+
+# Ruta local del modelo (si ya descargado) o HF hub id
+FLUX_MODEL_ID = os.getenv("FLUX_MODEL_ID", "black-forest-labs/FLUX.1-schnell")
+FLUX_LOCAL_PATH = Path(os.getenv("FLUX_LOCAL_PATH", "/app/models/flux-schnell"))
 
 
 class ImageGenerator:
-    def __init__(self, model="schnell"):
+    def __init__(self, model: str = "schnell"):
+        self.model_id = FLUX_MODEL_ID
         self.pipe = None
-        self.model = model
+
+    # ── Carga / descarga ──────────────────────────────────────────────────────
 
     def _load(self):
         if self.pipe is not None:
             return
-
-        n_threads = min(os.cpu_count() or 16, 16)
-        torch.set_num_threads(n_threads)
-        try:
-            torch.set_num_interop_threads(max(1, n_threads // 2))
-        except RuntimeError:
-            pass
-
-        hf_token = os.environ.get("HF_TOKEN")
-        if hf_token:
-            try:
-                from huggingface_hub import login
-                login(token=hf_token, add_to_git_credential=False)
-            except Exception:
-                pass
-
-        use_gpu = torch.cuda.is_available()
-        device = "cuda" if use_gpu else "cpu"
-        dtype = torch.bfloat16
-
-        model_id = {
-            "dev": "black-forest-labs/FLUX.1-dev",
-            "schnell": "black-forest-labs/FLUX.1-schnell",
-        }[self.model]
-
-        self.steps = 25 if self.model == "dev" else 4
-        self.guidance = 3.5 if self.model == "dev" else 0.0
-
-        print(f"Cargando {model_id} ({device}, {dtype}, {n_threads} threads)...")
+        logger.info("Cargando FLUX.1-schnell...")
+        local = FLUX_LOCAL_PATH if FLUX_LOCAL_PATH.exists() else self.model_id
         self.pipe = FluxPipeline.from_pretrained(
-            model_id,
-            torch_dtype=dtype,
+            str(local),
+            torch_dtype=torch.bfloat16,
         )
+        # pipe.to("cuda") — NUNCA enable_model_cpu_offload() en UMA
+        self.pipe = self.pipe.to("cuda")
+        logger.info("FLUX listo en GPU")
 
-        # UMA (Strix Halo): cargar directo a GPU — cpu_offload causa SVM thrashing
-        # La memoria es físicamente compartida, las copias CPU↔GPU son redundantes
-        self.pipe.to(device)
+    def _unload(self):
+        if self.pipe is None:
+            return
+        logger.info("Descargando FLUX de GPU...")
+        del self.pipe
+        self.pipe = None
+        gc.collect()
+        torch.cuda.empty_cache()
+        logger.info("GPU liberada")
 
-        # VAE tiling (helps with large images, minimal overhead)
+    # ── Generación ────────────────────────────────────────────────────────────
+
+    def generate_single(
+        self,
+        prompt: str,
+        output_path: str | None = None,
+        width: int = 1080,
+        height: int = 1920,
+        steps: int = 4,          # schnell funciona bien con 4 steps
+        guidance: float = 0.0,   # schnell no usa guidance
+    ) -> Path:
+        """Genera una imagen y la guarda. Devuelve la ruta."""
+        self._load()
         try:
-            self.pipe.vae.enable_slicing()
-            self.pipe.vae.enable_tiling()
-        except Exception:
-            pass
-
-    def unload(self):
-        """Libera VRAM para que otros modelos puedan usarla."""
-        if self.pipe is not None:
-            del self.pipe
-            self.pipe = None
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-            print("FLUX descargado de VRAM")
-
-    def generate(self, prompts: list[str], job_id: str, output_dir: Path) -> list[Path]:
-        self._load()
-        output_dir.mkdir(parents=True, exist_ok=True)
-        paths = []
-
-        for i, prompt in enumerate(prompts):
-            full_prompt = (
-                f"cinematic photography, ultra realistic, 4K, professional lighting, "
-                f"shallow depth of field, {prompt}, "
-                f"financial content, modern aesthetic, Spain"
-            )
-
-            print(f"  Generando imagen {i+1}/{len(prompts)}...", flush=True)
-            with torch.inference_mode():
-                image = self.pipe(
-                    prompt=full_prompt,
-                    num_inference_steps=self.steps,
-                    guidance_scale=self.guidance,
-                    height=1344,
-                    width=768,
-                ).images[0]
-
-            path = output_dir / f"img_{i:02d}.png"
-            image.save(path)
-            paths.append(path)
-
-        return paths
-
-    def generate_single(self, prompt: str, output_path: str = None,
-                        width: int = 768, height: int = 1344,
-                        steps: int = None, guidance: float = None) -> str:
-        self._load()
-        steps = steps or self.steps
-        guidance = guidance if guidance is not None else self.guidance
-
-        if output_path is None:
-            output_path = f"/home/gmktec/shorts/output/ondemand/img_{id(prompt) % 100000:05d}.png"
-
-        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-
-        print(f"Generando: {prompt[:80]}...")
-        with torch.inference_mode():
-            image = self.pipe(
+            logger.info(f"Generando imagen {width}×{height}, {steps} steps...")
+            result = self.pipe(
                 prompt=prompt,
+                width=width,
+                height=height,
                 num_inference_steps=steps,
                 guidance_scale=guidance,
-                height=height,
-                width=width,
-            ).images[0]
+                output_type="pil",
+            )
+            image: Image.Image = result.images[0]
 
-        image.save(output_path)
-        print(f"Guardada en: {output_path}")
-        return output_path
+            if output_path is None:
+                out_dir = Path("output/tmp")
+                out_dir.mkdir(parents=True, exist_ok=True)
+                output_path = out_dir / f"frame_{os.urandom(4).hex()}.png"
+            else:
+                output_path = Path(output_path)
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+
+            image.save(str(output_path), format="PNG")
+            logger.info(f"Imagen guardada: {output_path}")
+            return output_path
+
+        finally:
+            self._unload()
+
+    def generate_batch(
+        self,
+        prompts: list[str],
+        output_dir: str | Path = "output/tmp",
+        width: int = 1080,
+        height: int = 1920,
+        steps: int = 4,
+    ) -> list[Path]:
+        """Genera varias imágenes en una sola carga del modelo."""
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        self._load()
+        paths = []
+        try:
+            for i, prompt in enumerate(prompts):
+                logger.info(f"Imagen {i+1}/{len(prompts)}: {prompt[:60]}...")
+                result = self.pipe(
+                    prompt=prompt,
+                    width=width,
+                    height=height,
+                    num_inference_steps=steps,
+                    guidance_scale=0.0,
+                    output_type="pil",
+                )
+                path = output_dir / f"frame_{i:02d}_{os.urandom(3).hex()}.png"
+                result.images[0].save(str(path), format="PNG")
+                paths.append(path)
+                logger.info(f"  → {path}")
+        finally:
+            self._unload()
+        return paths

@@ -1,15 +1,37 @@
 [Unit]
 Description=VideoBot Finanzas Claras
-After=network.target
+After=network.target ollama.service
+Wants=ollama.service
 
 [Service]
 Type=simple
-User=gmktec
-WorkingDirectory=/home/gmktec/shorts
-ExecStart=/home/gmktec/shorts/venv/bin/python main.py
-Restart=always
-RestartSec=30
-Environment=PYTHONUNBUFFERED=1
+User=YOUR_USER
+WorkingDirectory=/home/YOUR_USER/shorts-tiktok
+
+# Entorno Python 3.11 venv
+Environment="PATH=/home/YOUR_USER/shorts-tiktok/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="VIRTUAL_ENV=/home/YOUR_USER/shorts-tiktok/venv"
+
+# ROCm / Strix Halo gfx1151 — CRÍTICAS
+Environment="HSA_OVERRIDE_GFX_VERSION=11.5.1"
+Environment="HSA_ENABLE_SDMA=0"
+Environment="GPU_MAX_ALLOC_PERCENT=100"
+Environment="GPU_MAX_HEAP_SIZE=100"
+Environment="HSA_XNACK=1"
+Environment="PYTORCH_HIP_ALLOC_CONF=backend:native,expandable_segments:True,max_split_size_mb:512"
+Environment="TORCH_BLAS_PREFER_HIPBLASLT=1"
+Environment="ROCBLAS_USE_HIPBLASLT=1"
+Environment="HIP_VISIBLE_DEVICES=0"
+Environment="ROCR_VISIBLE_DEVICES=0"
+Environment="FLASH_ATTENTION_TRITON_AMD_ENABLE=TRUE"
+
+# App
+EnvironmentFile=/home/YOUR_USER/shorts-tiktok/.env
+ExecStart=/home/YOUR_USER/shorts-tiktok/venv/bin/python main.py
+Restart=on-failure
+RestartSec=60
+StandardOutput=append:/home/YOUR_USER/shorts-tiktok/logs/videobot.log
+StandardError=append:/home/YOUR_USER/shorts-tiktok/logs/videobot_error.log
 
 [Install]
 WantedBy=multi-user.target
