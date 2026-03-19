@@ -50,21 +50,21 @@ def parse_step(log_text):
     progress = 0
 
     step_patterns = [
-        (r"iniciando nuevo job", "init", 3),
+        (r"iniciando nuevo job|gpu lock", "init", 3),
         (r"tema:", "decide", 7),
-        (r"generando imagen 1", "img1", 13),
-        (r"generando imagen 2", "img2", 20),
-        (r"generando imagen 3", "img3", 27),
-        (r"animando.*clip.*1|video_gen.*1/3", "anim1", 35),
-        (r"animando.*clip.*2|video_gen.*2/3", "anim2", 45),
-        (r"animando.*clip.*3|video_gen.*3/3", "anim3", 55),
+        (r"generando imagen 1|generando 3 imagenes|imagen 1/3", "img1", 13),
+        (r"imagen 2/3|generando imagen 2", "img2", 20),
+        (r"imagen 3/3|generando imagen 3", "img3", 27),
+        (r"animando.*1|animando.*img_00|clip 0:", "anim1", 35),
+        (r"animando.*2|animando.*img_01|clip 1:", "anim2", 45),
+        (r"animando.*3|animando.*img_02|clip 2:", "anim3", 55),
         (r"concatena", "concat", 65),
         (r"generando voz|tts|kokoro", "tts", 70),
-        (r"mezclando|mix_audio", "mix", 78),
+        (r"mezclando|mix.audio|musicgen", "mix", 78),
         (r"subt[ií]tulo", "subs", 83),
-        (r"cta|suscr[ií]bete", "cta", 88),
+        (r"cta|outro|suscr[ií]bete", "cta", 88),
         (r"publicando", "publish", 92),
-        (r"job completado|completado", "done", 100),
+        (r"pipeline completo|job completado|completado", "done", 100),
     ]
 
     for pattern, s, p in step_patterns:
@@ -83,7 +83,12 @@ def parse_step(log_text):
             base = {"anim1": 35, "anim2": 45, "anim3": 55}[step]
             progress = base + int(last_pbar * 0.10)
 
-    return step, min(progress, 100)
+    # Parse timers from ⏱ lines
+    timers = {}
+    for m in re.finditer(r'⏱\s*(.+?):\s*(\d+)s\s*\(total:\s*(\d+)s\)', log_text):
+        timers[m.group(1)] = {"phase": int(m.group(2)), "total": int(m.group(3))}
+
+    return step, min(progress, 100), timers
 
 
 def get_db():
@@ -173,45 +178,77 @@ def _get_system_stats():
         stats["disk_total_gb"] = 0
         stats["disk_pct"] = 0
 
-    # GPU - read from running generate container that has GPU access
+    # CPU temperature (k10temp sensor)
+    stats["cpu_temp"] = "-"
+    stats["nvme_temp"] = "-"
+    try:
+        import glob as glob_mod2
+        for prefix in [SYS, "/sys"]:
+            for hwmon in glob_mod2.glob(f"{prefix}/class/hwmon/hwmon*"):
+                name_f = Path(hwmon) / "name"
+                if not name_f.exists():
+                    continue
+                name = name_f.read_text().strip()
+                if name == "k10temp":
+                    temp_f = Path(hwmon) / "temp1_input"
+                    if temp_f.exists():
+                        stats["cpu_temp"] = f"{int(temp_f.read_text().strip()) // 1000}°C"
+                elif name == "nvme":
+                    temp_f = Path(hwmon) / "temp1_input"
+                    if temp_f.exists():
+                        stats["nvme_temp"] = f"{int(temp_f.read_text().strip()) // 1000}°C"
+            if stats["cpu_temp"] != "-":
+                break
+    except Exception:
+        pass
+
+    # GPU - read directly from sysfs (host mounted at /host/sys)
     stats["gpu_use"] = "-"
     stats["gpu_vram"] = "-"
+    stats["gpu_vram_used_gb"] = 0
+    stats["gpu_vram_total_gb"] = 0
     stats["gpu_temp"] = "-"
+    stats["gpu_power"] = "-"
     try:
-        # Try rocm-smi inside a generate container
-        gen_containers = _find_all_generate_containers()
-        gpu_container = gen_containers[0] if gen_containers else None
+        for prefix in [SYS, "/sys"]:
+            for card in ["card0", "card1", "card2"]:
+                base = Path(f"{prefix}/class/drm/{card}/device")
+                busy = base / "gpu_busy_percent"
+                if not busy.exists():
+                    continue
 
-        if gpu_container:
-            result = subprocess.run(
-                ["docker", "exec", gpu_container, "python3", "-c",
-                 "import json,subprocess;r=subprocess.run(['rocm-smi','--showuse','--showmemuse','--showtemp','--json'],capture_output=True,text=True);print(r.stdout if r.returncode==0 else '{}')"],
-                capture_output=True, text=True, timeout=5
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                gpu_data = json.loads(result.stdout.strip())
-                if gpu_data:
-                    card = list(gpu_data.values())[0]
-                    stats["gpu_use"] = str(card.get("GPU use (%)", card.get("GFX Activity", "-")))
-                    if "%" not in stats["gpu_use"] and stats["gpu_use"] != "-":
-                        stats["gpu_use"] += "%"
-                    mem_use = card.get("GPU memory use (%)", card.get("VRAM Activity", ""))
-                    stats["gpu_vram"] = str(mem_use) if mem_use else "-"
-                    if "%" not in stats["gpu_vram"] and stats["gpu_vram"] != "-":
-                        stats["gpu_vram"] += "%"
-                    temp = card.get("Temperature (Sensor edge) (C)", card.get("Temperature", ""))
-                    stats["gpu_temp"] = str(temp) + "°C" if temp else "-"
-        else:
-            # Fallback: try sysfs on host
-            import glob
-            for prefix in [SYS, "/sys"]:
-                for card in ["card0", "card1", "card2"]:
-                    p = Path(f"{prefix}/class/drm/{card}/device/gpu_busy_percent")
-                    if p.exists():
-                        stats["gpu_use"] = p.read_text().strip() + "%"
-                        break
-                if stats["gpu_use"] != "-":
-                    break
+                # GPU utilization
+                stats["gpu_use"] = busy.read_text().strip() + "%"
+
+                # VRAM usage
+                vram_used_f = base / "mem_info_vram_used"
+                vram_total_f = base / "mem_info_vram_total"
+                if vram_used_f.exists() and vram_total_f.exists():
+                    vram_used = int(vram_used_f.read_text().strip())
+                    vram_total = int(vram_total_f.read_text().strip())
+                    used_gb = round(vram_used / (1024**3), 1)
+                    total_gb = round(vram_total / (1024**3), 1)
+                    pct = round(vram_used / vram_total * 100, 1) if vram_total > 0 else 0
+                    stats["gpu_vram"] = f"{pct}%"
+                    stats["gpu_vram_used_gb"] = used_gb
+                    stats["gpu_vram_total_gb"] = total_gb
+
+                # Temperature (millidegrees -> degrees)
+                import glob as glob_mod
+                hwmon = glob_mod.glob(str(base / "hwmon" / "hwmon*" / "temp1_input"))
+                if hwmon:
+                    temp_m = int(Path(hwmon[0]).read_text().strip())
+                    stats["gpu_temp"] = f"{temp_m // 1000}°C"
+
+                # Power (microwatts -> watts)
+                power_f = glob_mod.glob(str(base / "hwmon" / "hwmon*" / "power1_average"))
+                if power_f:
+                    power_uw = int(Path(power_f[0]).read_text().strip())
+                    stats["gpu_power"] = f"{power_uw / 1_000_000:.0f}W"
+
+                break
+            if stats["gpu_use"] != "-":
+                break
     except Exception:
         pass
 
@@ -415,7 +452,7 @@ def api_live_logs():
                 capture_output=True, text=True, timeout=10
             )
             log = result.stdout + result.stderr
-            step, progress = parse_step(log)
+            step, progress, timers = parse_step(log)
             status = "Generando..."
             for label, sid in PIPELINE_STEPS:
                 if sid == step:
@@ -427,6 +464,7 @@ def api_live_logs():
                 "step": step,
                 "progress": progress,
                 "status": status,
+                "timers": timers,
             })
         except Exception:
             jobs.append({"container": c, "log": "", "step": "init", "progress": 0, "status": "Iniciando..."})

@@ -95,11 +95,11 @@
     <div class="layout">
         <!-- Stats -->
         <div class="row-stats">
-            <div class="mini-stat"><div class="val" id="cpuVal" style="color:var(--accent2)">-</div><div class="lbl">CPU</div><div class="sys-bar"><div class="sys-bar-fill bar-ok" id="cpuBar" style="width:0%"></div></div></div>
+            <div class="mini-stat"><div class="val" id="cpuVal" style="color:var(--accent2)">-</div><div class="lbl">CPU</div><div class="sub" id="cpuTemp"></div><div class="sys-bar"><div class="sys-bar-fill bar-ok" id="cpuBar" style="width:0%"></div></div></div>
             <div class="mini-stat"><div class="val" id="ramVal" style="color:var(--cyan)">-</div><div class="lbl">RAM</div><div class="sub" id="ramSub"></div><div class="sys-bar"><div class="sys-bar-fill bar-ok" id="ramBar" style="width:0%"></div></div></div>
             <div class="mini-stat"><div class="val" id="diskVal" style="color:var(--yellow)">-</div><div class="lbl">Disco</div><div class="sub" id="diskSub"></div><div class="sys-bar"><div class="sys-bar-fill bar-ok" id="diskBar" style="width:0%"></div></div></div>
-            <div class="mini-stat"><div class="val" id="gpuVal" style="color:var(--green)">-</div><div class="lbl">GPU</div><div class="sub" id="gpuTemp"></div></div>
-            <div class="mini-stat"><div class="val" id="gpuVram" style="color:var(--green)">-</div><div class="lbl">VRAM</div></div>
+            <div class="mini-stat"><div class="val" id="gpuVal" style="color:var(--green)">-</div><div class="lbl">GPU</div><div class="sub" id="gpuTemp"></div><div class="sys-bar"><div class="sys-bar-fill bar-ok" id="gpuBar" style="width:0%"></div></div></div>
+            <div class="mini-stat"><div class="val" id="gpuVram" style="color:var(--green)">-</div><div class="lbl">VRAM</div><div class="sub" id="gpuVramSub"></div><div class="sys-bar"><div class="sys-bar-fill bar-ok" id="gpuVramBar" style="width:0%"></div></div></div>
             <div class="mini-stat"><div class="val stat-accent" id="statTotal">-</div><div class="lbl">Videos</div></div>
             <div class="mini-stat"><div class="val" style="color:var(--green)" id="statSuccess">-</div><div class="lbl">OK</div></div>
             <div class="mini-stat"><div class="val" style="color:var(--red)" id="statFailed">-</div><div class="lbl">Fail</div></div>
@@ -199,7 +199,16 @@
 <script>
 const STEPS=[{id:"init",l:"Inicio"},{id:"decide",l:"Claude"},{id:"img1",l:"Img 1/3"},{id:"img2",l:"Img 2/3"},{id:"img3",l:"Img 3/3"},{id:"anim1",l:"Anim 1/3"},{id:"anim2",l:"Anim 2/3"},{id:"anim3",l:"Anim 3/3"},{id:"concat",l:"Concat"},{id:"tts",l:"TTS"},{id:"mix",l:"Mix"},{id:"subs",l:"Subs"},{id:"cta",l:"CTA"},{id:"publish",l:"Publish"},{id:"done",l:"Hecho"}];
 let genStartTime=null;
-function renderSteps(c){const i=STEPS.findIndex(s=>s.id===c);return STEPS.map((s,j)=>`<span class="step-pill${j<i?' done':j===i?' active':''}">${s.l}</span>`).join('');}
+function renderSteps(c,timers){
+    const i=STEPS.findIndex(s=>s.id===c);
+    const timerMap={'img1':'FLUX imagenes','img2':'FLUX imagenes','img3':'FLUX imagenes','anim1':'Wan2.1 animacion','anim2':'Wan2.1 animacion','anim3':'Wan2.1 animacion','concat':'Concat clips','tts':'TTS ES','mix':'MusicGen','subs':'Subtitulos ES','cta':'Outro ES'};
+    return STEPS.map((s,j)=>{
+        const cls=j<i?' done':j===i?' active':'';
+        const tk=timerMap[s.id];
+        const t=tk&&timers&&timers[tk]?` (${timers[tk].phase}s)`:'';
+        return `<span class="step-pill${cls}">${s.l}${t}</span>`;
+    }).join('');
+}
 function barClass(p){return p>85?'bar-crit':p>60?'bar-warn':'bar-ok';}
 async function fetchJSON(u){return(await fetch(u)).json();}
 
@@ -210,11 +219,17 @@ async function loadStatus(){
         const d=await fetchJSON('/api/status');const sys=d.system||{};
         const cpu=sys.cpu||0;document.getElementById('cpuVal').textContent=cpu+'%';
         const cb=document.getElementById('cpuBar');cb.style.width=cpu+'%';cb.className='sys-bar-fill '+barClass(cpu);
+        document.getElementById('cpuTemp').textContent=[sys.cpu_temp,sys.nvme_temp?'NVMe '+sys.nvme_temp:''].filter(x=>x&&x!=='-'&&x!=='NVMe -').join(' · ');
         document.getElementById('ramVal').textContent=sys.ram_pct+'%';document.getElementById('ramSub').textContent=`${sys.ram_used_gb}/${sys.ram_total_gb}GB`;
         const rb=document.getElementById('ramBar');rb.style.width=sys.ram_pct+'%';rb.className='sys-bar-fill '+barClass(sys.ram_pct);
         document.getElementById('diskVal').textContent=sys.disk_pct+'%';document.getElementById('diskSub').textContent=`${sys.disk_used_gb}/${sys.disk_total_gb}GB`;
         const db2=document.getElementById('diskBar');db2.style.width=sys.disk_pct+'%';db2.className='sys-bar-fill '+barClass(sys.disk_pct);
-        document.getElementById('gpuVal').textContent=sys.gpu_use||'-';document.getElementById('gpuVram').textContent=sys.gpu_vram||'-';document.getElementById('gpuTemp').textContent=sys.gpu_temp||'';
+        const gpuUse=parseFloat(sys.gpu_use)||0;document.getElementById('gpuVal').textContent=sys.gpu_use||'-';
+        const gpuB=document.getElementById('gpuBar');gpuB.style.width=gpuUse+'%';gpuB.className='sys-bar-fill '+barClass(gpuUse);
+        document.getElementById('gpuVram').textContent=sys.gpu_vram||'-';
+        const vramPct=parseFloat(sys.gpu_vram)||0;const vramB=document.getElementById('gpuVramBar');vramB.style.width=vramPct+'%';vramB.className='sys-bar-fill '+barClass(vramPct);
+        document.getElementById('gpuVramSub').textContent=sys.gpu_vram_used_gb?`${sys.gpu_vram_used_gb}/${sys.gpu_vram_total_gb}GB`:'';
+        const gpuInfo=[sys.gpu_temp,sys.gpu_power].filter(x=>x&&x!=='-').join(' · ');document.getElementById('gpuTemp').textContent=gpuInfo;
         const s=d.stats||{};document.getElementById('statTotal').textContent=s.total??'-';document.getElementById('statSuccess').textContent=s.success??'-';document.getElementById('statFailed').textContent=s.failed??'-';
         const job=d.job;const dot=document.getElementById('statusDot');const txt=document.getElementById('statusText');
         if(job.running){dot.className='dot busy';txt.textContent='Generando...';if(!genStartTime)genStartTime=new Date();}
@@ -257,10 +272,13 @@ async function loadLiveLogs(){
         for(const j of jobs){
             const logLines=j.log.split('\n').slice(-40).join('\n');
             const logId=`joblog-${j.container.replace(/[^a-z0-9]/gi,'')}`;
+            const timers=j.timers||{};
+            const lastTimer=Object.values(timers).pop();
+            const totalTime=lastTimer?` — ${lastTimer.total}s total`:'';
             html+=`<div class="job-card">
-                <div class="job-header"><span class="job-name">${j.container}</span><div style="display:flex;gap:8px;align-items:center"><span style="color:var(--accent2)">${j.status} (${j.progress}%)</span><button class="btn-sm btn-outline" onclick="navigator.clipboard.writeText(document.getElementById('${logId}').textContent)">Copiar</button></div></div>
+                <div class="job-header"><span class="job-name">${j.container}</span><div style="display:flex;gap:8px;align-items:center"><span style="color:var(--accent2)">${j.status} (${j.progress}%)${totalTime}</span><button class="btn-sm btn-outline" onclick="navigator.clipboard.writeText(document.getElementById('${logId}').textContent)">Copiar</button></div></div>
                 <div class="pipeline-bar-wrap"><div class="pipeline-bar" style="width:${j.progress}%">${j.progress}%</div></div>
-                <div class="pipeline-steps" style="margin-bottom:8px;">${renderSteps(j.step)}</div>
+                <div class="pipeline-steps" style="margin-bottom:8px;">${renderSteps(j.step,timers)}</div>
                 <div class="log-box" id="${logId}" style="max-height:150px;font-size:10px;">${logLines.replace(/</g,'&lt;')}</div>
             </div>`;
         }

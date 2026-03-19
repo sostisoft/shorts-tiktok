@@ -4,6 +4,10 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 ENV HSA_OVERRIDE_GFX_VERSION=11.0.0
 ENV PYTORCH_ROCM_ARCH=gfx1100
+ENV HSA_ENABLE_SDMA=0
+ENV GPU_MAX_ALLOC_PERCENT=100
+ENV GPU_SINGLE_ALLOC_PERCENT=100
+ENV GPU_MAX_HEAP_SIZE=100
 ENV TZ=Europe/Madrid
 
 # Sistema base
@@ -13,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git curl wget \
     build-essential \
     libssl-dev libffi-dev \
-    fonts-liberation \
+    fonts-liberation fonts-montserrat \
     && rm -rf /var/lib/apt/lists/*
 
 # Alias python
@@ -26,10 +30,10 @@ WORKDIR /app
 RUN python3 -m venv /app/venv
 ENV PATH="/app/venv/bin:$PATH"
 
-# PyTorch 2.5+ CPU (necesario para RMSNorm y diffusers modernos)
+# PyTorch con ROCm 6.2 para GPU AMD
 RUN pip install --no-cache-dir \
-    torch>=2.5.0 torchvision torchaudio \
-    --index-url https://download.pytorch.org/whl/cpu
+    torch torchvision torchaudio \
+    --index-url https://download.pytorch.org/whl/rocm6.2
 
 # Dependencias Python
 COPY requirements.txt .

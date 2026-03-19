@@ -3,7 +3,15 @@
     "filename": "hipoteca_pareja_firmando.png",
     "prompt": "young Spanish couple sitting in a modern bank office signing mortgage documents, professional financial advisor across the desk, warm office lighting, glass walls, city view in background",
     "topic": "Hipoteca fija vs variable",
-    "keywords": ["couple", "office", "signing", "bank", "mortgage", "city", "document"],
+    "keywords": [
+      "couple",
+      "office",
+      "signing",
+      "bank",
+      "mortgage",
+      "city",
+      "document"
+    ],
     "times_used": 0,
     "created_at": "2025-03-18T17:00:00"
   },
@@ -11,7 +19,14 @@
     "filename": "hipoteca_calle_espanola.png",
     "prompt": "beautiful Spanish city street at sunset with residential apartment buildings, warm golden hour light, people walking, Mediterranean architecture, real estate concept",
     "topic": "Hipoteca fija vs variable",
-    "keywords": ["city", "street", "building", "apartment", "spain", "house"],
+    "keywords": [
+      "city",
+      "street",
+      "building",
+      "apartment",
+      "spain",
+      "house"
+    ],
     "times_used": 0,
     "created_at": "2025-03-18T17:00:00"
   },
@@ -19,7 +34,15 @@
     "filename": "hipoteca_graficos_portatil.png",
     "prompt": "close up of a laptop screen showing financial charts and stock market data in red and green, dark ambient lighting, person's hand on keyboard, trading concept",
     "topic": "Hipoteca fija vs variable",
-    "keywords": ["laptop", "screen", "chart", "graph", "stock", "trading", "financial"],
+    "keywords": [
+      "laptop",
+      "screen",
+      "chart",
+      "graph",
+      "stock",
+      "trading",
+      "financial"
+    ],
     "times_used": 0,
     "created_at": "2025-03-18T17:00:00"
   },
@@ -27,7 +50,12 @@
     "filename": "inflacion_bote_monedas.png",
     "prompt": "glass jar filled with coins and banknotes with smoke or steam rising from it, kitchen table setting, warm cinematic lighting, inflation concept, money losing value",
     "topic": "Inflación",
-    "keywords": ["coins", "money", "cash", "savings"],
+    "keywords": [
+      "coins",
+      "money",
+      "cash",
+      "savings"
+    ],
     "times_used": 0,
     "created_at": "2025-03-18T17:00:00"
   },
@@ -35,7 +63,12 @@
     "filename": "pensiones_img_00.png",
     "prompt": "close up of hands filling out a tax return form on a white desk, pen writing, warm natural light from window, financial paperwork concept",
     "topic": "Plan de pensiones",
-    "keywords": ["document", "paperwork", "tax", "signing"],
+    "keywords": [
+      "document",
+      "paperwork",
+      "tax",
+      "signing"
+    ],
     "times_used": 0,
     "created_at": "2025-03-18T17:00:00"
   },
@@ -43,7 +76,13 @@
     "filename": "pensiones_img_01.png",
     "prompt": "young Spanish man in casual clothes sitting at wooden desk with laptop, researching investments, modern minimalist apartment, natural lighting",
     "topic": "Plan de pensiones",
-    "keywords": ["young", "man", "laptop", "person", "investment"],
+    "keywords": [
+      "young",
+      "man",
+      "laptop",
+      "person",
+      "investment"
+    ],
     "times_used": 0,
     "created_at": "2025-03-18T17:00:00"
   },
@@ -51,8 +90,47 @@
     "filename": "pensiones_img_02.png",
     "prompt": "close up of smartphone screen showing investment app with green rising chart and number 300, hand holding phone, blurred city lights background",
     "topic": "Plan de pensiones",
-    "keywords": ["phone", "screen", "chart", "investment", "financial"],
+    "keywords": [
+      "phone",
+      "screen",
+      "chart",
+      "investment",
+      "financial"
+    ],
     "times_used": 0,
     "created_at": "2025-03-18T17:00:00"
+  },
+  {
+    "filename": "20260318_0446a6c9.png",
+    "prompt": "Cinematic close-up of a stressed freelancer sitting at a cluttered wooden desk in a small Spanish apartment, surrounded by paper invoices and an open laptop showing a social security website, warm morning light filtering through window blinds, shallow depth of field, documentary style, muted color palette with golden tones, ultra-realistic photography, 4K",
+    "topic": "autónomos cuota seguridad social",
+    "keywords": [
+      "laptop",
+      "desk"
+    ],
+    "times_used": 0,
+    "created_at": "2026-03-18T21:12:04.570207"
+  },
+  {
+    "filename": "20260318_1f2c0487.png",
+    "prompt": "Wide shot of a modern minimalist infographic animation rendered as a physical board — a rising bar chart showing different income brackets alongside decreasing fee percentages, placed in a bright contemporary coworking space in Madrid, natural daylight, clean geometric design, cinematic composition, realistic textures, sharp focus",
+    "topic": "autónomos cuota seguridad social",
+    "keywords": [
+      "chart"
+    ],
+    "times_used": 0,
+    "created_at": "2026-03-18T21:12:42.386558"
+  },
+  {
+    "filename": "20260318_83e47662.png",
+    "prompt": "Medium shot of a confident self-employed woman in her early 30s reviewing financial documents on a tablet at a café terrace in Barcelona, slight smile of relief on her face, blurred urban street background with soft bokeh, late afternoon golden hour light, candid documentary feel, photorealistic, high detail",
+    "topic": "autónomos cuota seguridad social",
+    "keywords": [
+      "woman",
+      "street",
+      "financial"
+    ],
+    "times_used": 0,
+    "created_at": "2026-03-18T21:13:20.101116"
   }
 ]

@@ -104,16 +104,17 @@ def generate_only():
     logger.info(f"[{job_id}] Iniciando generación (sin publicar)")
 
     try:
-        # 1. Decidir tema
+        # ── FASE 1/6: Decidir tema (Claude API) ──
+        logger.info(f"[{job_id}] ▶ FASE 1/6: Decidiendo tema...")
         decision, topic_id = _decide_topic(job_id)
-        logger.info(f"[{job_id}] Tema: {decision.topic}")
-        logger.info(f"[{job_id}] Hook: {decision.hook}")
+        logger.info(f"[{job_id}] ✓ FASE 1/6: Tema: {decision.topic}")
+        logger.info(f"[{job_id}]   Hook: {decision.hook}")
 
         # Marcar tema manual como usado
         if topic_id:
             mark_topic_used(topic_id, job_id)
 
-        # 2. Guardar en DB con status pending
+        # Guardar en DB con status pending
         save_video(
             job_id=job_id,
             topic=decision.topic,
@@ -122,25 +123,28 @@ def generate_only():
             title="",
             tags=[]
         )
-
-        # Guardar narración EN en DB
         update_metadata(job_id, narration_en=decision.narration_en)
 
-        # 3. Generar vídeo (imágenes + animación + TTS + música + ffmpeg)
+        # ── FASE 2/6: Generar vídeo (GPU + CPU) ──
+        logger.info(f"[{job_id}] ▶ FASE 2/6: Generando vídeo (FLUX + Wan2.1 + TTS + ffmpeg)...")
+        update_status(job_id, "generating")
         start_time = time.time()
         video_path = generate_video(decision, job_id)
         gen_seconds = int(time.time() - start_time)
-        logger.info(f"[{job_id}] Generación completada en {gen_seconds}s")
+        logger.info(f"[{job_id}] ✓ FASE 2/6: Vídeo generado en {gen_seconds}s ({gen_seconds//60}m {gen_seconds%60}s)")
 
-        # 4. Generar metadata ES
+        # ── FASE 3/6: Metadata ES (Claude API) ──
+        logger.info(f"[{job_id}] ▶ FASE 3/6: Generando metadata ES...")
         metadata_es = gen_metadata(decision.topic, decision.hook, decision.narration)
-        logger.info(f"[{job_id}] Título ES: {metadata_es.title}")
+        logger.info(f"[{job_id}] ✓ FASE 3/6: Título ES: {metadata_es.title}")
 
-        # 5. Generar metadata EN
+        # ── FASE 4/6: Metadata EN (Claude API) ──
+        logger.info(f"[{job_id}] ▶ FASE 4/6: Generando metadata EN...")
         metadata_en = gen_metadata_en(decision.topic, decision.hook, decision.narration_en)
-        logger.info(f"[{job_id}] Título EN: {metadata_en.title}")
+        logger.info(f"[{job_id}] ✓ FASE 4/6: Título EN: {metadata_en.title}")
 
-        # 6. Guardar metadata en DB y marcar como generated
+        # ── FASE 5/6: Guardar metadata en DB ──
+        logger.info(f"[{job_id}] ▶ FASE 5/6: Guardando en base de datos...")
         update_metadata(
             job_id,
             title=metadata_es.title,
@@ -152,16 +156,18 @@ def generate_only():
             generation_time_s=gen_seconds,
         )
         update_status(job_id, "generated")
+        logger.info(f"[{job_id}] ✓ FASE 5/6: DB actualizada")
 
-        # Verificar que los ficheros existen
+        # ── FASE 6/6: Verificar ficheros ──
         es_path = Path(f"output/pending/{job_id}_es.mp4")
         en_path = Path(f"output/pending/{job_id}_en.mp4")
         if not es_path.exists() or not en_path.exists():
             raise FileNotFoundError(f"Vídeos no encontrados: {es_path}, {en_path}")
 
-        logger.info(f"[{job_id}] Vídeo generado y listo para publicar")
+        logger.info(f"[{job_id}] ✓ FASE 6/6: Vídeo listo para publicar")
         logger.info(f"[{job_id}]   ES: {es_path}")
         logger.info(f"[{job_id}]   EN: {en_path}")
+        logger.info(f"[{job_id}] ════ GENERACIÓN COMPLETADA ({gen_seconds//60}m {gen_seconds%60}s) ════")
         return job_id
 
     except Exception as e:

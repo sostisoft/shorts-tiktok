@@ -23,14 +23,22 @@ Corre 24/7 en un GMKtec EVO-X2 con Ubuntu 24.04 y AMD Ryzen AI MAX+ 395.
 
 ## Stack técnico
 - OS: Ubuntu 24.04 LTS (x86_64)
-- GPU: AMD Radeon 890M vía ROCm 6.1
-- Generación vídeo: Wan2.1 I2V (imagen → vídeo)
+- GPU: AMD Radeon 890M (gfx1151) vía ROCm — HSA_OVERRIDE_GFX_VERSION=11.5.1
+- Generación vídeo: Wan2.1 I2V (imagen → vídeo) — pipe.to("cuda"), NO cpu_offload
 - Generación imagen: FLUX.1 schnell
-- Voz: Kokoro TTS (español)
-- Edición: ffmpeg
-- LLM: Claude API (claude-sonnet-4-6)
+- Voz: Kokoro TTS (español ef_dora, inglés af_sarah)
+- Música: MusicGen small (Meta)
+- Edición: ffmpeg (subtítulos ASS estilo TikTok, loudnorm + sidechain ducking)
+- LLM: Ollama + Qwen 2.5 14B (local) con fallback a Claude API
 - Scheduler: APScheduler
 - DB: SQLite
+
+## Notas ROCm (Strix Halo / gfx1151)
+- NUNCA usar enable_model_cpu_offload() — causa SVM thrashing en UMA
+- Usar pipe.to("cuda") siempre — la memoria es unificada
+- HSA_ENABLE_SDMA=0 es obligatorio en APU
+- Al descargar un modelo: del pipe + gc.collect() + torch.cuda.empty_cache()
+- Los modelos cargan secuencialmente (FLUX → unload → Wan2.1 → unload → MusicGen)
 
 ## Fases de construcción
 - [ ] Fase 1: Setup del sistema (Ubuntu + ROCm + Python)

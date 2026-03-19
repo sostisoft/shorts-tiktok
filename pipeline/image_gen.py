@@ -1,3 +1,4 @@
+import gc
 import os
 import torch
 from diffusers import FluxPipeline
@@ -5,7 +6,7 @@ from pathlib import Path
 
 
 class ImageGenerator:
-    def __init__(self, model="dev"):
+    def __init__(self, model="schnell"):
         self.pipe = None
         self.model = model
 
@@ -18,9 +19,8 @@ class ImageGenerator:
         try:
             torch.set_num_interop_threads(max(1, n_threads // 2))
         except RuntimeError:
-            pass  # Already set or parallel work started
+            pass
 
-        # Login to HuggingFace for gated models (FLUX)
         hf_token = os.environ.get("HF_TOKEN")
         if hf_token:
             try:
@@ -38,7 +38,6 @@ class ImageGenerator:
             "schnell": "black-forest-labs/FLUX.1-schnell",
         }[self.model]
 
-        # dev: 20-30 steps, guidance 3.5 | schnell: 4 steps, guidance 0
         self.steps = 25 if self.model == "dev" else 4
         self.guidance = 3.5 if self.model == "dev" else 0.0
 
@@ -47,16 +46,27 @@ class ImageGenerator:
             model_id,
             torch_dtype=dtype,
         )
-        self.pipe = self.pipe.to(device)
 
+        # UMA (Strix Halo): cargar directo a GPU — cpu_offload causa SVM thrashing
+        # La memoria es físicamente compartida, las copias CPU↔GPU son redundantes
+        self.pipe.to(device)
+
+        # VAE tiling (helps with large images, minimal overhead)
         try:
-            self.pipe.enable_attention_slicing(slice_size="auto")
+            self.pipe.vae.enable_slicing()
+            self.pipe.vae.enable_tiling()
         except Exception:
             pass
-        try:
-            self.pipe.enable_vae_slicing()
-        except Exception:
-            pass
+
+    def unload(self):
+        """Libera VRAM para que otros modelos puedan usarla."""
+        if self.pipe is not None:
+            del self.pipe
+            self.pipe = None
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            print("FLUX descargado de VRAM")
 
     def generate(self, prompts: list[str], job_id: str, output_dir: Path) -> list[Path]:
         self._load()
@@ -70,14 +80,14 @@ class ImageGenerator:
                 f"financial content, modern aesthetic, Spain"
             )
 
-            print(f"  Generando imagen {i+1}/{len(prompts)}...")
+            print(f"  Generando imagen {i+1}/{len(prompts)}...", flush=True)
             with torch.inference_mode():
                 image = self.pipe(
                     prompt=full_prompt,
                     num_inference_steps=self.steps,
                     guidance_scale=self.guidance,
-                    height=1920,
-                    width=1080,
+                    height=1344,
+                    width=768,
                 ).images[0]
 
             path = output_dir / f"img_{i:02d}.png"
@@ -86,11 +96,9 @@ class ImageGenerator:
 
         return paths
 
-
     def generate_single(self, prompt: str, output_path: str = None,
-                        width: int = 1080, height: int = 1920,
+                        width: int = 768, height: int = 1344,
                         steps: int = None, guidance: float = None) -> str:
-        """Genera una sola imagen bajo demanda."""
         self._load()
         steps = steps or self.steps
         guidance = guidance if guidance is not None else self.guidance

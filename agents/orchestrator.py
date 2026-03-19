@@ -1,8 +1,8 @@
-import anthropic
 import json
-import os
 from dataclasses import dataclass
 from datetime import date
+from agents.llm_client import generate_json
+
 
 @dataclass
 class VideoDecision:
@@ -41,20 +41,20 @@ IMAGEN PROMPTS: 3 escenas realistas, estilo cinematográfico.
 SIEMPRE en inglés, muy descriptivos (50-80 palabras cada uno).
 Deben ser visualmente distintas entre sí para dar dinamismo al vídeo.
 
-Responde ÚNICAMENTE en JSON sin backticks ni texto adicional.
+Responde ÚNICAMENTE en JSON válido. Sin backticks, sin texto adicional, sin explicaciones.
 """
 
 TOPIC_PROMPT = """
 Se te da un TEMA CONCRETO elegido por el creador del canal.
 Tu trabajo es SOLO generar el guión, gancho e image prompts para ese tema.
 NO elijas otro tema. Trabaja exclusivamente con el que se te da.
+
+Responde ÚNICAMENTE en JSON válido. Sin backticks, sin texto adicional.
 """
 
 
 def decide(recent_topics: list[str]) -> VideoDecision:
-    """Claude elige tema libremente (modo automático)."""
-    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-
+    """LLM elige tema libremente (modo automático)."""
     user_msg = f"""
 Hoy es {date.today().strftime('%A %d de %B de %Y')}.
 
@@ -76,23 +76,12 @@ JSON exacto:
   "duration_target": 15
 }}
 """
-
-    msg = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1500,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_msg}]
-    )
-
-    raw = msg.content[0].text.strip()
-    data = json.loads(raw)
+    data = generate_json(SYSTEM_PROMPT, user_msg)
     return VideoDecision(**data)
 
 
 def decide_from_topic(topic: str, enfoque: str = None, recent_topics: list[str] = None) -> VideoDecision:
-    """Claude genera guión + metadata a partir de un tema dado por el usuario."""
-    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-
+    """LLM genera guión + metadata a partir de un tema dado por el usuario."""
     tema_desc = topic
     if enfoque:
         tema_desc += f" (enfoque: {enfoque})"
@@ -122,14 +111,5 @@ JSON exacto:
   "duration_target": 15
 }}
 """
-
-    msg = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1500,
-        system=SYSTEM_PROMPT + "\n" + TOPIC_PROMPT,
-        messages=[{"role": "user", "content": user_msg}]
-    )
-
-    raw = msg.content[0].text.strip()
-    data = json.loads(raw)
+    data = generate_json(SYSTEM_PROMPT + "\n" + TOPIC_PROMPT, user_msg)
     return VideoDecision(**data)

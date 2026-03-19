@@ -1,7 +1,5 @@
-import anthropic
-import json
-import os
 from dataclasses import dataclass
+from agents.llm_client import generate_json
 
 @dataclass
 class VideoMetadata:
@@ -31,17 +29,11 @@ REGLAS TAGS:
 - 10-15 tags en español
 - Mix: generales (finanzas, inversión, dinero) + específicos del tema
 
-Responde ÚNICAMENTE en JSON sin backticks.
+Responde ÚNICAMENTE en JSON válido. Sin backticks, sin texto adicional.
 """
 
 def generate(topic: str, hook: str, narration: str) -> VideoMetadata:
-    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-
-    msg = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1000,
-        system=META_PROMPT,
-        messages=[{"role": "user", "content": f"""
+    user_msg = f"""
 Tema: {topic}
 Hook: {hook}
 Guión (resumen): {narration[:300]}...
@@ -54,11 +46,8 @@ JSON exacto:
   "description": "...",
   "tags": ["tag1", "tag2", ...]
 }}
-"""}]
-    )
-
-    raw = msg.content[0].text.strip()
-    data = json.loads(raw)
+"""
+    data = generate_json(META_PROMPT, user_msg)
     return VideoMetadata(**data)
 
 
@@ -84,19 +73,13 @@ TAG RULES:
 - 10-15 tags in English
 - Mix: general (finance, investing, money) + topic-specific
 
-Respond ONLY in JSON without backticks.
+Respond ONLY in valid JSON. No backticks, no extra text.
 """
 
 
 def generate_en(topic: str, hook: str, narration_en: str) -> VideoMetadata:
     """Generate English metadata for YouTube Shorts."""
-    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-
-    msg = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1000,
-        system=META_PROMPT_EN,
-        messages=[{"role": "user", "content": f"""
+    user_msg = f"""
 Topic: {topic}
 Hook: {hook}
 Script (summary): {narration_en[:300]}...
@@ -109,9 +92,6 @@ Exact JSON:
   "description": "...",
   "tags": ["tag1", "tag2", ...]
 }}
-"""}]
-    )
-
-    raw = msg.content[0].text.strip()
-    data = json.loads(raw)
+"""
+    data = generate_json(META_PROMPT_EN, user_msg)
     return VideoMetadata(**data)

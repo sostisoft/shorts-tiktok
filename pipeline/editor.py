@@ -40,22 +40,39 @@ def mix_audio(
     narration_path: Path,
     music_path: Path,
     output_path: Path,
-    music_volume: float = 0.12
+    music_volume: float = 0.15
 ) -> Path:
-    """Mezcla vídeo + narración + música de fondo."""
+    """
+    Mezcla vídeo + narración + música con audio profesional:
+    - Loudnorm voz a -14 LUFS (estándar plataformas)
+    - Sidechain compress: música baja cuando hay voz (ducking)
+    - Loudnorm final de la mezcla
+    """
+    filter_complex = (
+        # Normalizar voz a -14 LUFS
+        "[1:a]loudnorm=I=-14:TP=-1.5:LRA=11[voice];"
+        # Música baja + loop infinito
+        f"[2:a]volume={music_volume},aloop=loop=-1:size=2e+09[music_quiet];"
+        # Split voz para sidechain
+        "[voice]asplit=2[sc][voice_out];"
+        # Ducking: música baja cuando hay voz
+        "[music_quiet][sc]sidechaincompress=threshold=0.02:ratio=6:attack=200:release=1000[music_ducked];"
+        # Mezclar voz + música ducked
+        "[voice_out][music_ducked]amix=inputs=2:duration=first:dropout_transition=2[audio_mix];"
+        # Loudnorm final
+        "[audio_mix]loudnorm=I=-14:TP=-1.5:LRA=11[audio_final]"
+    )
+
     cmd = [
         "ffmpeg", "-y",
         "-i", str(video_path),
         "-i", str(narration_path),
         "-i", str(music_path),
-        "-filter_complex",
-        f"[1:a]volume=1.0[narr];"
-        f"[2:a]volume={music_volume},aloop=loop=-1:size=2e+09[music];"
-        f"[narr][music]amix=inputs=2:duration=first[aout]",
+        "-filter_complex", filter_complex,
         "-map", "0:v",
-        "-map", "[aout]",
+        "-map", "[audio_final]",
         "-c:v", "copy",
-        "-c:a", "aac",
+        "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
         "-shortest",
         str(output_path)
     ]
@@ -91,45 +108,61 @@ def burn_subtitles(
     output_path: Path
 ) -> Path:
     """
-    Quema subtítulos estilo TikTok en el vídeo.
-    Divide el texto en chunks de 4-5 palabras.
+    Quema subtítulos estilo TikTok con ASS: 3 palabras a la vez,
+    Montserrat Bold, outline grueso, centrado en pantalla.
     """
     audio_duration = get_duration(narration_audio_path)
     words = narration_text.split()
-    chunk_size = 3  # 3 palabras por chunk — más legible en 15s
+    chunk_size = 3
     chunks = [words[i:i+chunk_size] for i in range(0, len(words), chunk_size)]
 
     time_per_chunk = audio_duration / len(chunks)
 
-    # Generar fichero SRT
-    srt_path = output_path.parent / "subs.srt"
-    with open(srt_path, "w", encoding="utf-8") as f:
+    # Generar fichero ASS con estilo TikTok
+    ass_path = output_path.parent / "subs.ass"
+    with open(ass_path, "w", encoding="utf-8") as f:
+        f.write("[Script Info]\n")
+        f.write("ScriptType: v4.00+\n")
+        f.write("PlayResX: 1080\n")
+        f.write("PlayResY: 1920\n")
+        f.write("WrapStyle: 0\n\n")
+        f.write("[V4+ Styles]\n")
+        f.write("Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, "
+                "OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, "
+                "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
+                "Alignment, MarginL, MarginR, MarginV, Encoding\n")
+        # Estilo principal: blanco, Montserrat Bold, outline negro grueso
+        f.write("Style: Default,Montserrat,72,&H00FFFFFF,&H000000FF,"
+                "&H00000000,&H80000000,1,0,0,0,"
+                "100,100,2,0,1,4,0,"
+                "5,40,40,400,1\n")
+        # Estilo highlight: cian para palabra activa
+        f.write("Style: Highlight,Montserrat,80,&H00FFFF00,&H000000FF,"
+                "&H00000000,&H80000000,1,0,0,0,"
+                "105,105,2,0,1,5,0,"
+                "5,40,40,400,1\n\n")
+        f.write("[Events]\n")
+        f.write("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
+
         for i, chunk in enumerate(chunks):
             start = i * time_per_chunk
             end = start + time_per_chunk
             text = " ".join(chunk).upper()
-            f.write(f"{i+1}\n")
-            f.write(f"{_fmt_time(start)} --> {_fmt_time(end)}\n")
-            f.write(f"{text}\n\n")
-
-    # Estilo subtítulos: blanco, negrita, sombra negra, centrado abajo
-    subtitle_style = (
-        "FontName=Arial,FontSize=28,Bold=1,"
-        "PrimaryColour=&H00FFFFFF,"
-        "OutlineColour=&H00000000,"
-        "Outline=3,Shadow=1,"
-        "Alignment=2,MarginV=80"
-    )
+            start_ts = _fmt_ass_time(start)
+            end_ts = _fmt_ass_time(end)
+            # Alternar estilos para dar dinamismo visual
+            style = "Highlight" if i % 2 == 0 else "Default"
+            f.write(f"Dialogue: 0,{start_ts},{end_ts},{style},,0,0,0,,{text}\n")
 
     cmd = [
         "ffmpeg", "-y",
         "-i", str(video_path),
-        "-vf", f"subtitles={srt_path}:force_style='{subtitle_style}'",
+        "-vf", f"ass={ass_path}",
         "-c:a", "copy",
         str(output_path)
     ]
     subprocess.run(cmd, check=True, capture_output=True)
-    srt_path.unlink()
+    ass_path.unlink()
     return output_path
 
 
@@ -166,8 +199,18 @@ def add_outro(video_path: Path, output_path: Path) -> Path:
 
 
 def _fmt_time(seconds: float) -> str:
+    """Formato SRT: HH:MM:SS,mmm"""
     h = int(seconds // 3600)
     m = int((seconds % 3600) // 60)
     s = int(seconds % 60)
     ms = int((seconds % 1) * 1000)
     return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+
+def _fmt_ass_time(seconds: float) -> str:
+    """Formato ASS: H:MM:SS.cc (centésimas)"""
+    h = int(seconds // 3600)
+    m = int((seconds % 3600) // 60)
+    s = int(seconds % 60)
+    cs = int((seconds % 1) * 100)
+    return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
