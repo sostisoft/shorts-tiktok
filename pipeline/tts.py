@@ -109,8 +109,18 @@ class TTSGenerator:
     def _generate_kokoro(self, text: str, output_path: Path):
         """Fallback con Kokoro si Chatterbox no está disponible."""
         try:
-            from kokoro import KPipeline
-            pipeline = KPipeline(lang_code="e")  # español
+            # Forzar CPU — ocultar GPU via HIP/ROCR (no CUDA) para que
+            # Kokoro no intente usar MIOpen que falla en gfx1151
+            old_hip = os.environ.get("HIP_VISIBLE_DEVICES", "")
+            old_rocr = os.environ.get("ROCR_VISIBLE_DEVICES", "")
+            os.environ["HIP_VISIBLE_DEVICES"] = "-1"
+            os.environ["ROCR_VISIBLE_DEVICES"] = "-1"
+            try:
+                from kokoro import KPipeline
+                pipeline = KPipeline(lang_code="e")  # español
+            finally:
+                os.environ["HIP_VISIBLE_DEVICES"] = old_hip
+                os.environ["ROCR_VISIBLE_DEVICES"] = old_rocr
             voice = "ef_dora"
             generator = pipeline(text, voice=voice, speed=1.0)
             samples = []

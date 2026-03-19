@@ -5,33 +5,41 @@ Wants=ollama.service
 
 [Service]
 Type=simple
-User=YOUR_USER
-WorkingDirectory=/home/YOUR_USER/shorts-tiktok
+User=gmktec
+WorkingDirectory=/home/gmktec/shorts
 
-# Entorno Python 3.11 venv
-Environment="PATH=/home/YOUR_USER/shorts-tiktok/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-Environment="VIRTUAL_ENV=/home/YOUR_USER/shorts-tiktok/venv"
+# Python venv
+Environment="PATH=/home/gmktec/shorts/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+Environment="VIRTUAL_ENV=/home/gmktec/shorts/venv"
 
-# ROCm / Strix Halo gfx1151 — CRÍTICAS
-Environment="HSA_OVERRIDE_GFX_VERSION=11.5.1"
+# ROCm / Strix Halo gfx1151 — TheRock nativo (sin HSA_OVERRIDE)
 Environment="HSA_ENABLE_SDMA=0"
 Environment="GPU_MAX_ALLOC_PERCENT=100"
+Environment="GPU_SINGLE_ALLOC_PERCENT=100"
 Environment="GPU_MAX_HEAP_SIZE=100"
-Environment="HSA_XNACK=1"
-Environment="PYTORCH_HIP_ALLOC_CONF=backend:native,expandable_segments:True,max_split_size_mb:512"
-Environment="TORCH_BLAS_PREFER_HIPBLASLT=1"
-Environment="ROCBLAS_USE_HIPBLASLT=1"
-Environment="HIP_VISIBLE_DEVICES=0"
-Environment="ROCR_VISIBLE_DEVICES=0"
-Environment="FLASH_ATTENTION_TRITON_AMD_ENABLE=TRUE"
+Environment="PYTORCH_HIP_ALLOC_CONF=backend:native,expandable_segments:True,garbage_collection_threshold:0.9"
+Environment="TORCH_ROCM_AOTRITON_ENABLE_EXPERIMENTAL=1"
+Environment="OMP_NUM_THREADS=16"
+Environment="MKL_NUM_THREADS=16"
+
+# Evitar BrokenPipe de tqdm/HuggingFace en modo servicio
+Environment="TQDM_DISABLE=1"
+Environment="HF_HUB_DISABLE_PROGRESS_BARS=1"
+Environment="PYTHONUNBUFFERED=1"
+
+# Ollama
+Environment="OLLAMA_HOST=http://localhost:11434"
+
+# Timezone
+Environment="TZ=Europe/Madrid"
 
 # App
-EnvironmentFile=/home/YOUR_USER/shorts-tiktok/.env
-ExecStart=/home/YOUR_USER/shorts-tiktok/venv/bin/python main.py
+EnvironmentFile=/home/gmktec/shorts/.env
+ExecStart=/home/gmktec/shorts/venv/bin/python main.py
 Restart=on-failure
 RestartSec=60
-StandardOutput=append:/home/YOUR_USER/shorts-tiktok/logs/videobot.log
-StandardError=append:/home/YOUR_USER/shorts-tiktok/logs/videobot_error.log
+StandardOutput=append:/home/gmktec/shorts/logs/videobot.log
+StandardError=append:/home/gmktec/shorts/logs/videobot_error.log
 
 [Install]
 WantedBy=multi-user.target

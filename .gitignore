@@ -15,8 +15,10 @@ credentials/
 
 # Models (too large for git)
 models/wan21/
+models/wan21-1.3b/
 models/flux/
 models/kokoro/
+.archive/
 *.safetensors
 *.onnx
 *.bin

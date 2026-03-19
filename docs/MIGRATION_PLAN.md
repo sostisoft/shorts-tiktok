@@ -1,8 +1,9 @@
 # Plan de Migración: Pipeline 100% Local + Optimización ROCm
 
 **Fecha**: 2026-03-19
-**Estado actual**: Pipeline funcional con Claude API (sonnet-4-6) + Kokoro TTS + FLUX + Wan2.1 + MusicGen
-**Objetivo**: Pipeline 100% local + ROCm optimizado para gfx1151 + logs en tiempo real con estimaciones
+**Completado**: 2026-03-19
+**Estado**: ✅ TODAS LAS FASES IMPLEMENTADAS
+**Resultado**: Pipeline 100% local con Ollama + ROCm 7.2 + TheRock gfx1151 nativo + ejecución nativa (sin Docker)
 
 ---
 
@@ -47,9 +48,9 @@
 Cada fase deja el pipeline **funcional**. Si algo falla, el pipeline anterior sigue operativo.
 
 ### FASE 0: Backup y preparación
-- [ ] Backup de ficheros actuales que se van a modificar
-- [ ] Verificar que Ollama está instalado y Qwen 2.5 14B disponible
-- [ ] Instalar fuente Montserrat Bold en el contenedor
+- [x] Backup de ficheros actuales que se van a modificar
+- [x] Verificar que Ollama está instalado y Qwen 2.5 14B disponible
+- [x] Instalar fuente Montserrat Bold en el contenedor
 
 ### FASE 1: Optimización ROCm (Docker + env vars)
 **Ficheros**: `Dockerfile`, `docker-compose.yml`

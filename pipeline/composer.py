@@ -20,15 +20,15 @@ logger = logging.getLogger("videobot.composer")
 # Fuente y estilo para subtítulos (estilo TikTok/Shorts)
 SUBTITLE_STYLE = {
     "fontname": "Montserrat",
-    "fontsize": 72,
+    "fontsize": 28,                  # legible pero no gigante en 1080x1920
     "bold": True,
-    "primarycolor": "&H00FFFFFF",    # blanco
-    "outlinecolor": "&H00000000",    # negro
-    "backcolor": "&H80000000",       # semitransparente
-    "outline": 3,
-    "shadow": 2,
-    "alignment": 2,                  # center-bottom
-    "marginv": 120,                  # margen inferior
+    "primarycolor": "&H00FFFFFF",    # blanco puro
+    "outlinecolor": "&H00000000",    # borde negro
+    "backcolor": "&H00000000",       # sin fondo
+    "outline": 2,                    # borde fino
+    "shadow": 0,                     # sin sombra
+    "alignment": 2,                  # centrado abajo
+    "marginv": 150,                  # zona baja del vídeo (no pegado al borde)
 }
 
 
@@ -131,19 +131,13 @@ class VideoComposer:
             if not text:
                 continue
 
-            # Dividir en grupos de 2-3 palabras para efecto TikTok
-            words = text.split()
-            chunk_size = 3
-            chunks = [words[i:i+chunk_size] for i in range(0, len(words), chunk_size)]
-            chunk_duration = (end_ms - start_ms) // max(len(chunks), 1)
-
-            for i, chunk in enumerate(chunks):
-                line = pysubs2.SSAEvent(
-                    start=start_ms + i * chunk_duration,
-                    end=start_ms + (i + 1) * chunk_duration,
-                    text=" ".join(chunk).upper(),
-                )
-                subs.append(line)
+            # Ya viene pre-dividido en chunks de 3 palabras desde build_subtitle_segments_from_narration
+            line = pysubs2.SSAEvent(
+                start=start_ms,
+                end=end_ms,
+                text=text,
+            )
+            subs.append(line)
 
         subs.save(str(output))
         logger.info(f"Subtítulos ASS generados: {len(subs)} eventos → {output}")
@@ -176,10 +170,11 @@ class VideoComposer:
 
         audio_filter = (
             "[0:a]loudnorm=I=-16:TP=-1.5:LRA=11[voice_n];"
+            "[voice_n]asplit=2[voice_sc][voice_mix];"
             "[1:a]volume=0.20[music_raw];"
-            "[music_raw][voice_n]sidechaincompress="
+            "[music_raw][voice_sc]sidechaincompress="
             "threshold=0.02:ratio=4:attack=100:release=1000[music_d];"
-            "[voice_n][music_d]amix=inputs=2:duration=first:dropout_transition=2[audio_out]"
+            "[voice_mix][music_d]amix=inputs=2:duration=first:dropout_transition=2[audio_out]"
         )
 
         # Video: escalar a 1080×1920, quemar subtítulos
@@ -240,10 +235,7 @@ class VideoComposer:
 
     @staticmethod
     def build_subtitle_segments_from_script(script_lines: list[str], total_duration: float) -> list[dict]:
-        """
-        Distribuye líneas de guión uniformemente en el tiempo.
-        Para timing real, usar whisper-timestamped sobre el audio TTS.
-        """
+        """Distribuye líneas de guión uniformemente en el tiempo."""
         if not script_lines:
             return []
         duration_per = total_duration / len(script_lines)
@@ -251,6 +243,30 @@ class VideoComposer:
         for i, line in enumerate(script_lines):
             segments.append({
                 "text": line,
+                "start": i * duration_per,
+                "end": (i + 1) * duration_per,
+            })
+        return segments
+
+    @staticmethod
+    def build_subtitle_segments_from_narration(narration_text: str, total_duration: float, words_per_chunk: int = 3) -> list[dict]:
+        """
+        Divide la narración en chunks de N palabras, distribuidos uniformemente.
+        Esto muestra lo que se está diciendo por voz, estilo karaoke/TikTok.
+        """
+        if not narration_text:
+            return []
+        words = narration_text.split()
+        chunks = []
+        for i in range(0, len(words), words_per_chunk):
+            chunks.append(" ".join(words[i:i + words_per_chunk]))
+        if not chunks:
+            return []
+        duration_per = total_duration / len(chunks)
+        segments = []
+        for i, chunk in enumerate(chunks):
+            segments.append({
+                "text": chunk,
                 "start": i * duration_per,
                 "end": (i + 1) * duration_per,
             })

@@ -7,6 +7,8 @@ Generador de imágenes con FLUX.1-schnell via diffusers.
 import gc
 import logging
 import os
+os.environ.setdefault("TQDM_DISABLE", "1")
+os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
 from pathlib import Path
 
 import torch
@@ -17,7 +19,7 @@ logger = logging.getLogger("videobot.image_gen")
 
 # Ruta local del modelo (si ya descargado) o HF hub id
 FLUX_MODEL_ID = os.getenv("FLUX_MODEL_ID", "black-forest-labs/FLUX.1-schnell")
-FLUX_LOCAL_PATH = Path(os.getenv("FLUX_LOCAL_PATH", "/app/models/flux-schnell"))
+FLUX_LOCAL_PATH = Path(os.getenv("FLUX_LOCAL_PATH", "models/flux-schnell"))
 
 
 class ImageGenerator:
@@ -31,11 +33,19 @@ class ImageGenerator:
         if self.pipe is not None:
             return
         logger.info("Cargando FLUX.1-schnell...")
-        local = FLUX_LOCAL_PATH if FLUX_LOCAL_PATH.exists() else self.model_id
-        self.pipe = FluxPipeline.from_pretrained(
-            str(local),
-            torch_dtype=torch.bfloat16,
-        )
+        if FLUX_LOCAL_PATH.exists():
+            logger.info(f"  Ruta local: {FLUX_LOCAL_PATH}")
+            self.pipe = FluxPipeline.from_pretrained(
+                str(FLUX_LOCAL_PATH),
+                torch_dtype=torch.bfloat16,
+                local_files_only=True,
+            )
+        else:
+            logger.info(f"  Descargando desde HuggingFace: {self.model_id}")
+            self.pipe = FluxPipeline.from_pretrained(
+                self.model_id,
+                torch_dtype=torch.bfloat16,
+            )
         # pipe.to("cuda") — NUNCA enable_model_cpu_offload() en UMA
         self.pipe = self.pipe.to("cuda")
         logger.info("FLUX listo en GPU")

@@ -1,0 +1,19 @@
+[Unit]
+Description=VideoBot WebUI - Finanzas Claras
+After=network.target
+
+[Service]
+Type=simple
+User=gmktec
+WorkingDirectory=/home/gmktec/shorts
+Environment="PATH=/home/gmktec/shorts/venv/bin:/usr/local/bin:/usr/bin"
+Environment="VIRTUAL_ENV=/home/gmktec/shorts/venv"
+Environment="PROJECT_DIR=/home/gmktec/shorts"
+Environment="DB_PATH=/home/gmktec/shorts/db/videobot.db"
+Environment="LOG_PATH=/home/gmktec/shorts/logs/videobot.log"
+ExecStart=/home/gmktec/shorts/venv/bin/python webui/app.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

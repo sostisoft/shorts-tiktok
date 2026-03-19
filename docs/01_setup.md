@@ -1,143 +1,107 @@
-# 01 — Setup: Ubuntu 24.04 + ROCm + dependencias
+# 01 — Setup: Ubuntu 24.04 + ROCm 7.2 + TheRock gfx1151
+
+## Hardware
+- GMKtec EVO-X2 con AMD Ryzen AI MAX+ 395 (gfx1151, Strix Halo)
+- 128 GB LPDDR5X memoria unificada
+- GPU: Radeon 8060S (RDNA 3.5)
 
 ## Requisitos previos
-- Ubuntu 24.04 LTS instalado (x86_64)
-- Conexión a internet por cable
-- Usuario con sudo
-- Al menos 100GB libres en disco
+- Ubuntu 24.04 LTS (x86_64)
+- Kernel 6.18.4+ (actualmente 6.19.6-zabbly+)
+- BIOS: VRAM ~512 MB (mínimo), el resto como GTT dinámico
+- Al menos 100 GB libres en disco
 
 ---
 
-## Script de instalación completo
-
-Claude Code debe crear `setup.sh` en la raíz del proyecto y ejecutarlo:
+## 1. Sistema base
 
 ```bash
-#!/bin/bash
-set -e
-echo "=== VideoBot Finanzas Claras — Setup ==="
-
-# 1. Sistema base
 sudo apt update && sudo apt upgrade -y
 sudo apt install -y \
-    python3.11 python3.11-venv python3-pip \
+    python3.12 python3.12-venv python3-pip python3.12-dev \
     ffmpeg \
     git curl wget \
     build-essential \
     libssl-dev libffi-dev \
-    pkg-config \
-    htop nvtop
+    fonts-liberation fonts-montserrat \
+    htop
+```
 
-# 2. ROCm 6.1 para AMD Ryzen AI MAX+ 395
-# Añadir repositorio oficial AMD
-wget https://repo.radeon.com/amdgpu-install/6.1/ubuntu/noble/amdgpu-install_6.1.60100-1_all.deb
-sudo dpkg -i amdgpu-install_6.1.60100-1_all.deb
+## 2. ROCm 7.2
+
+```bash
+# Instalar desde repositorio oficial AMD
+wget https://repo.radeon.com/amdgpu-install/7.2/ubuntu/noble/amdgpu-install_7.2.70200-1_all.deb
+sudo apt install -y ./amdgpu-install_7.2.70200-1_all.deb
 sudo apt update
-
-# Instalar ROCm
-sudo amdgpu-install --usecase=rocm --no-dkms -y
-
-# Añadir usuario al grupo render y video
+sudo amdgpu-install -y --usecase=rocm --no-dkms  # sin DKMS — kernel zabbly ya trae driver
 sudo usermod -aG render,video $USER
+```
 
-# Variables de entorno ROCm
-echo 'export PATH=$PATH:/opt/rocm/bin' >> ~/.bashrc
-echo 'export HSA_OVERRIDE_GFX_VERSION=11.0.0' >> ~/.bashrc  # Para iGPU AMD
-echo 'export PYTORCH_ROCM_ARCH=gfx1100' >> ~/.bashrc
-source ~/.bashrc
+## 3. Kernel y memoria (GRUB)
 
-# 3. Verificar ROCm
-rocm-smi || echo "Reiniciar el sistema si rocm-smi falla"
+```bash
+# /etc/default/grub — GRUB_CMDLINE_LINUX_DEFAULT:
+quiet splash iommu=pt ttm.pages_limit=32505856 ttm.page_pool_size=32505856
 
-# 4. Entorno virtual Python
-python3.11 -m venv venv
+sudo update-grub && sudo reboot
+```
+
+## 4. Python venv + TheRock PyTorch
+
+```bash
+cd ~/shorts
+python3.12 -m venv venv
 source venv/bin/activate
 
-# 5. PyTorch con ROCm
-pip install torch torchvision torchaudio \
-    --index-url https://download.pytorch.org/whl/rocm6.1
+# PyTorch con TheRock nightlies — gfx1151 nativo, sin HSA_OVERRIDE
+pip install --pre torch torchaudio torchvision \
+    --index-url https://rocm.nightlies.amd.com/v2/gfx1151/
 
-# 6. Dependencias del bot
-pip install \
-    anthropic>=0.40.0 \
-    apscheduler>=3.10.0 \
-    sqlalchemy>=2.0.0 \
-    pyyaml>=6.0 \
-    python-dotenv>=1.0.0 \
-    requests>=2.31.0 \
-    diffusers>=0.30.0 \
-    transformers>=4.44.0 \
-    accelerate>=0.33.0 \
-    sentencepiece \
-    protobuf \
-    opencv-python \
-    Pillow>=10.0.0 \
-    imagehash>=4.3.0 \
-    google-api-python-client>=2.100.0 \
-    google-auth-httplib2>=0.2.0 \
-    google-auth-oauthlib>=1.1.0 \
-    kokoro>=0.9.4 \
-    soundfile \
-    numpy
-
-# 7. Crear estructura de directorios
-mkdir -p {credentials,models/{flux,wan21,kokoro},output/{pending,published,tmp},logs,db,config}
-
-# 8. Copiar .env.example
-cat > .env.example << 'EOF'
-# Anthropic
-ANTHROPIC_API_KEY=sk-ant-...
-
-# Google / YouTube
-GOOGLE_CLIENT_ID=449567324847-ki02nto6eu211qb8g45euool9jqettss.apps.googleusercontent.com
-GOOGLE_PROJECT_ID=finanzas-oc-yt
-YT_CHANNEL_ID=UC...
-YT_CREDENTIALS_FILE=credentials/yt_finanzas.json
-
-# Rutas modelos
-FLUX_MODEL=black-forest-labs/FLUX.1-schnell
-WAN21_MODEL=models/wan21
-KOKORO_VOICE=af_sarah   # voz femenina; af_heart, am_adam para masculina
-
-# Config bot
-VIDEOS_PER_DAY=2
-TMP_DIR=output/tmp
-OUTPUT_DIR=output/published
-PENDING_DIR=output/pending
-DB_PATH=db/videobot.db
-EOF
-
-cp .env.example .env
-echo ""
-echo "✅ Setup completo."
-echo "⚠️  Edita .env con tus valores reales"
-echo "⚠️  Reinicia el sistema para activar ROCm: sudo reboot"
+# Dependencias del proyecto
+pip install -r requirements.txt
 ```
 
----
-
-## Verificación post-instalación
+## 5. Ollama
 
 ```bash
-# Verificar PyTorch ve la GPU AMD
-python3 -c "
+curl -fsSL https://ollama.ai/install.sh | sh
+ollama pull qwen2.5:14b
+```
+
+## 6. Verificación
+
+```bash
+# ROCm
+cat /opt/rocm/.info/version        # 7.2.0
+rocminfo | grep gfx                # gfx1151
+
+# PyTorch + GPU
+source venv/bin/activate
+python -c "
 import torch
-print('PyTorch:', torch.__version__)
-print('ROCm disponible:', torch.cuda.is_available())
-print('GPU:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'No detectada')
+print(f'PyTorch: {torch.__version__}')
+print(f'GPU: {torch.cuda.get_device_name(0)}')
+x = torch.randn(100, 100, device='cuda', dtype=torch.bfloat16)
+print(f'Tensor GPU OK: {(x @ x.T).shape}')
 "
 
-# Verificar ffmpeg
+# Ollama
+ollama list | grep qwen2.5
+
+# FFmpeg + Montserrat
 ffmpeg -version | head -1
-
-# Verificar estructura
-ls -la
+fc-list | grep -i montserrat
 ```
 
-## Nota sobre HSA_OVERRIDE_GFX_VERSION
+## Variables de entorno ROCm (en run.sh)
 
-El Ryzen AI MAX+ 395 usa arquitectura RDNA3 (gfx1100/gfx1101).
-Si PyTorch no detecta la GPU, probar:
 ```bash
-export HSA_OVERRIDE_GFX_VERSION=11.0.1
+HSA_ENABLE_SDMA=0                    # Obligatorio en APU
+GPU_MAX_ALLOC_PERCENT=100
+GPU_SINGLE_ALLOC_PERCENT=100
+GPU_MAX_HEAP_SIZE=100
+PYTORCH_HIP_ALLOC_CONF="backend:native,expandable_segments:True,garbage_collection_threshold:0.9"
 ```
+
+**NO necesita HSA_OVERRIDE_GFX_VERSION** — TheRock tiene soporte nativo gfx1151.

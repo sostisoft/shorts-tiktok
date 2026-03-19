@@ -24,7 +24,7 @@ music_gen = MusicGenerator()
 MUSIC_PATH = Path("assets/music/finance_background.mp3")
 
 # GPU lock basado en fichero — funciona entre contenedores Docker
-GPU_LOCK_FILE = Path("/app/output/.gpu_lock")
+GPU_LOCK_FILE = Path("output/.gpu_lock")
 
 
 class FileLock:

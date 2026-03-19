@@ -6,6 +6,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from db.models import init_db
 from scheduler.runner import (
     generate_only, publish_only, night_generation_loop, run_job,
+    resume_job, list_jobs_status,
 )
 
 load_dotenv()
@@ -27,6 +28,7 @@ TIMEZONE = "Europe/Madrid"
 def main():
     os.makedirs("logs", exist_ok=True)
     os.makedirs("output/pending", exist_ok=True)
+    os.makedirs("output/jobs", exist_ok=True)
     init_db()
 
     # ── Entrada manual: python main.py generate ──
@@ -52,9 +54,38 @@ def main():
             logger.info("Ejecución completa manual (generar + publicar)")
             run_job()
             return
+        elif cmd == "resume":
+            target_id = sys.argv[2] if len(sys.argv) > 2 else None
+            if target_id:
+                logger.info(f"Resumiendo job: {target_id}")
+            else:
+                logger.info("Resumiendo ultimo job incompleto...")
+            job_id = resume_job(target_id)
+            if job_id:
+                logger.info(f"Job resumido y completado: {job_id}")
+            else:
+                logger.warning("No se pudo resumir ningun job")
+            return
+        elif cmd == "status":
+            jobs = list_jobs_status()
+            if not jobs:
+                print("No hay jobs en output/jobs/")
+                return
+            print(f"{'JOB ID':<12} {'STATUS':<10} {'TITLE':<40} {'PHASE':<8} {'UPDATED'}")
+            print("-" * 90)
+            for j in jobs:
+                phases_done = sum(
+                    1 for p in j.get("phases", {}).values()
+                    if p.get("status") == "done"
+                )
+                failed = j.get("failed_phase") or "-"
+                updated = (j.get("updated_at") or "")[:19]
+                title = (j.get("title") or "")[:38]
+                print(f"{j['job_id']:<12} {j['status']:<10} {title:<40} {phases_done}/6 F:{failed!s:<3} {updated}")
+            return
         else:
             logger.error(f"Comando desconocido: {cmd}")
-            print("Uso: python main.py [generate|publish|run]")
+            print("Uso: python main.py [generate|publish|run|resume [job_id]|status]")
             return
 
     # ── Scheduler automático ──
@@ -97,7 +128,7 @@ def main():
     logger.info("Generación nocturna: 00:00-06:00 (Madrid)")
     logger.info("Publicaciones: 09:00, 14:00, 19:00 (Madrid)")
     logger.info("Canal: @finanzasjpg")
-    logger.info("Entrada manual: python main.py [generate|publish|run]")
+    logger.info("Entrada manual: python main.py [generate|publish|run|resume|status]")
 
     try:
         scheduler.start()
