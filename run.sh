@@ -29,14 +29,14 @@ export OLLAMA_HOST="http://localhost:11434"
 export PYTHONUNBUFFERED=1
 export TZ=Europe/Madrid
 
-# ── Activar venv ──
-source venv/bin/activate
+# ── Activar venv (usar python del venv directamente por portabilidad) ──
+PYTHON="$(dirname "$0")/venv/bin/python3"
 
 echo "=== VideoBot Finanzas Claras ==="
 echo "ROCm: gfx1151 | Ollama: $OLLAMA_HOST"
-echo "Python: $(python --version) | PyTorch: $(python -c 'import torch; print(torch.__version__)')"
-echo "GPU: $(python -c 'import torch; print("disponible" if torch.cuda.is_available() else "NO disponible")')"
+echo "Python: $($PYTHON --version) | PyTorch: $($PYTHON -c 'import torch; print(torch.__version__)')"
+echo "GPU: $($PYTHON -c 'import torch; print("disponible" if torch.cuda.is_available() else "NO disponible")')"
 echo ""
 
 # ── Ejecutar ──
-exec python main.py "$@"
+exec $PYTHON main.py "$@"
