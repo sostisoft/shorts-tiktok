@@ -93,7 +93,6 @@ def mix_audio_no_music(
         "-map", "1:a",
         "-c:v", "copy",
         "-c:a", "aac",
-        "-shortest",
         str(output_path)
     ]
     subprocess.run(cmd, check=True, capture_output=True)
