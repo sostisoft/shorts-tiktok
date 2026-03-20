@@ -58,7 +58,7 @@ def mix_audio(
         # Ducking: música baja cuando hay voz
         "[music_quiet][sc]sidechaincompress=threshold=0.02:ratio=6:attack=200:release=1000[music_ducked];"
         # Mezclar voz + música ducked
-        "[voice_out][music_ducked]amix=inputs=2:duration=first:dropout_transition=2[audio_mix];"
+        "[voice_out][music_ducked]amix=inputs=2:duration=longest:dropout_transition=2[audio_mix];"
         # Loudnorm final
         "[audio_mix]loudnorm=I=-14:TP=-1.5:LRA=11[audio_final]"
     )
@@ -73,7 +73,6 @@ def mix_audio(
         "-map", "[audio_final]",
         "-c:v", "copy",
         "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
-        "-shortest",
         str(output_path)
     ]
     subprocess.run(cmd, check=True, capture_output=True)
@@ -168,28 +167,21 @@ def burn_subtitles(
 
 def add_outro(video_path: Path, output_path: Path) -> Path:
     """
-    Añade outro de marca fijo en los últimos 2 segundos.
-    Siempre igual: @finanzasjpg centrado para que la gente asocie la marca.
+    Añade outro de marca fijo en los últimos 3 segundos.
+    @finanzasjpg grande y centrado para que la gente asocie la marca.
     """
     duration = get_duration(video_path)
-    outro_start = max(0, duration - 2)
+    outro_start = max(0, duration - 3)
 
-    # Marca arriba + handle abajo — siempre el mismo cierre
     cmd = [
         "ffmpeg", "-y",
         "-i", str(video_path),
         "-vf",
-        # Línea 1: nombre del canal
-        f"drawtext=text='Finanzas Claras':"
-        f"fontfile=/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf:"
-        f"fontsize=42:fontcolor=white:bordercolor=black:borderw=4:"
-        f"x=(w-text_w)/2:y=h/2-40:"
-        f"enable='between(t,{outro_start},{duration})',"
-        # Línea 2: handle / @
+        # Handle @finanzasjpg grande y centrado
         f"drawtext=text='@finanzasjpg':"
-        f"fontfile=/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf:"
-        f"fontsize=28:fontcolor=yellow:bordercolor=black:borderw=3:"
-        f"x=(w-text_w)/2:y=h/2+20:"
+        f"fontfile=/usr/share/fonts/truetype/montserrat/Montserrat-Bold.ttf:"
+        f"fontsize=56:fontcolor=white:bordercolor=black:borderw=5:"
+        f"x=(w-text_w)/2:y=h/2:"
         f"enable='between(t,{outro_start},{duration})'",
         "-c:a", "copy",
         str(output_path)

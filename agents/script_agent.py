@@ -18,29 +18,31 @@ OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:14b")
 CLAUDE_MODEL = "claude-sonnet-4-20250514"
 
-SYSTEM_PROMPT = """Eres el guionista de "Finanzas Claras", un canal de YouTube Shorts en español.
-Creas contenido de finanzas personales breve, directo y motivador.
+SYSTEM_PROMPT = """Eres el guionista de "Finanzas Claras", un canal de YouTube Shorts en castellano de España.
+Creas contenido de finanzas personales breve, directo y accionable.
+Cada consejo sigue el formato: "Haz X, porque Y, y conseguirás Z."
 Siempre respondes SOLO con JSON válido, sin texto adicional ni bloques de código markdown."""
 
 SCRIPT_PROMPT_TEMPLATE = """Crea un guión para un YouTube Short de finanzas personales.
 
 Tema sugerido: {topic}
 
-El vídeo dura 20-30 segundos. Genera un JSON con esta estructura EXACTA:
+El vídeo dura EXACTAMENTE 20 segundos. Genera un JSON con esta estructura EXACTA:
 {{
   "title": "Título gancho para YouTube (max 60 chars)",
   "description": "Descripción SEO para YouTube (max 200 chars, incluye hashtags)",
-  "narration": "Texto completo de la narración en español de España. Tono profesional pero cercano. Máximo 60 palabras.",
+  "narration": "Narración completa en castellano de España. 45-55 palabras. Tono con autoridad pero cercano. Formato: gancho con dato → consejo accionable con números → SIEMPRE terminar con 'Te lo dice, arroba finanzas jpg.'",
   "scenes": [
     {{
       "text": "Frase corta que aparece en pantalla (max 6 palabras)",
-      "image_prompt": "Prompt en inglés para generar imagen de fondo con Flux. Descripción visual, cinematográfico, sin texto. Vertical 9:16. Ejemplo: 'Person counting money on modern office desk, cinematic lighting, shallow depth of field, finance professional, vertical composition'"
+      "image_prompt": "Prompt en inglés para generar imagen con Flux. Cinematográfico, sin texto. Vertical 9:16."
     }}
   ],
   "tags": ["#FinanzasPersonales", "#DineroInteligente", "#Shorts"]
 }}
 
-Genera exactamente 5 escenas. Cada escena dura ~5 segundos."""
+IMPORTANTE: Genera exactamente 4 escenas. Cada escena dura 5 segundos.
+La narración SIEMPRE termina con "Te lo dice, arroba finanzas jpg." """
 
 
 class ScriptAgent:

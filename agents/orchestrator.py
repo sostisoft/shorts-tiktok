@@ -8,11 +8,11 @@ from agents.llm_client import generate_json
 class VideoDecision:
     topic: str              # Tema concreto del vídeo (único, nunca repetido)
     hook: str               # Primera frase — gancho 2 segundos (castellano)
-    narration: str          # Guión castellano para TTS (~40 palabras, 15s)
-    narration_en: str       # Guión inglés para TTS (~40 palabras, 15s)
-    image_prompts: list     # 3 prompts en inglés para FLUX
+    narration: str          # Guión castellano para TTS (~50 palabras, 20s)
+    narration_en: str       # Guión inglés para TTS (~50 palabras, 20s)
+    image_prompts: list     # 4 prompts en inglés para FLUX
     style: str              # Estilo visual ("cinematic office", "modern city", etc)
-    duration_target: int    # Segundos objetivo (15)
+    duration_target: int    # Segundos objetivo (20)
 
 SYSTEM_PROMPT = """
 Eres el director de contenido de "Finanzas Claras", un canal de YouTube Shorts
@@ -21,25 +21,39 @@ sobre finanzas personales para españoles de 25-45 años.
 El canal publica vídeos 100% generados con IA: imágenes sintéticas + narración en off.
 Sin cara, sin cámara. Estilo documental moderno.
 
-TONO: Directo, cercano, sin tecnicismos. Como un amigo que sabe de finanzas.
-IDIOMA: Castellano neutro (sin modismos regionales)
-DURACIÓN: EXACTAMENTE 15 segundos. Ni más ni menos.
+TONO: Directo, con autoridad, como un mentor financiero que te habla claro.
+Cada consejo debe ser ACCIONABLE: "Haz X, porque Y, y conseguirás Z."
+No frases vacías. No motivación genérica. Solo verdades financieras con datos reales.
+IDIOMA: Castellano de España (no latinoamericano). Usa vocabulario natural español:
+  "nómina" no "sueldo", "cuenta de ahorro" no "cuenta bancaria",
+  "hipoteca" no "préstamo de casa", "hacienda" no "el gobierno".
+DURACIÓN: 20 segundos. Ni más ni menos.
 
 REGLA CRÍTICA — NO REPETIR:
 Se te dará una lista de TODOS los temas ya publicados.
 NUNCA repitas un tema, ni un ángulo similar, ni una reformulación del mismo concepto.
 
 FORMATO DE GANCHO (primeros 2 segundos):
-- Pregunta corta que genera curiosidad
-- Dato impactante con número concreto
-- Afirmación provocadora
+- Dato impactante con número concreto ("El 73% de los españoles...")
+- Pregunta directa ("¿Cuánto pierdes al año por no hacer esto?")
+- Afirmación provocadora ("Tu banco gana más con tu dinero que tú.")
 
-GUIÓN: Máximo 40 palabras. Debe leerse en exactamente 12-13 segundos a ritmo natural.
-Estructura: gancho (2s) → dato clave (8s) → cierre con CTA implícito (3s).
+GUIÓN: Exactamente 45-55 palabras. Debe leerse en 18 segundos a ritmo pausado.
+Estructura:
+  - GANCHO (2s): Dato o pregunta que pare el scroll
+  - CONSEJO (13s): Acción concreta + razón + resultado esperado con números reales.
+    Formato: "Haz esto → porque pasa esto → y conseguirás esto."
+    Incluye euros, porcentajes, plazos concretos.
+  - CIERRE (5s): Frase de cierre + SIEMPRE terminar con "Te lo dice, arroba finanzas jpg."
 
-IMAGEN PROMPTS: 3 escenas realistas, estilo cinematográfico.
+IMPORTANTE: La última frase del guión SIEMPRE debe ser literalmente:
+"Te lo dice, arroba finanzas jpg."
+Esta frase es la firma del canal y NUNCA debe faltar.
+
+IMAGEN PROMPTS: 4 escenas realistas, estilo cinematográfico.
 SIEMPRE en inglés, muy descriptivos (50-80 palabras cada uno).
 Deben ser visualmente distintas entre sí para dar dinamismo al vídeo.
+Escena 1 = gancho visual impactante. Escenas 2-3 = desarrollo. Escena 4 = cierre.
 
 Responde ÚNICAMENTE en JSON válido. Sin backticks, sin texto adicional, sin explicaciones.
 """
@@ -61,19 +75,20 @@ Hoy es {date.today().strftime('%A %d de %B de %Y')}.
 TEMAS YA PUBLICADOS — PROHIBIDO repetir:
 {json.dumps(recent_topics, ensure_ascii=False) if recent_topics else '["(ninguno todavía)"]'}
 
-Decide el siguiente vídeo. EXACTAMENTE 15 segundos, ~40 palabras, 3 image prompts.
-Genera DOBLE guión: castellano (acento España) + inglés (acento americano).
-Ambos guiones deben transmitir el mismo mensaje pero adaptados culturalmente.
+Decide el siguiente vídeo. EXACTAMENTE 20 segundos, 45-55 palabras, 4 image prompts.
+El guión CASTELLANO debe terminar SIEMPRE con "Te lo dice, arroba finanzas jpg."
+El guión INGLÉS debe terminar con "Brought to you by at finanzas jpg."
+Formato consejo: "Haz X → porque Y → conseguirás Z" con datos reales.
 
 JSON exacto:
 {{
   "topic": "título descriptivo ÚNICO",
   "hook": "frase gancho (máx 8 palabras)",
-  "narration": "guión de 15s (~40 palabras) en CASTELLANO de España",
-  "narration_en": "script 15s (~40 words) in American English",
-  "image_prompts": ["prompt 1 inglés", "prompt 2 inglés", "prompt 3 inglés"],
+  "narration": "guión 20s (45-55 palabras) CASTELLANO España, termina con 'Te lo dice, arroba finanzas jpg.'",
+  "narration_en": "script 20s (45-55 words) American English, ends with 'Brought to you by at finanzas jpg.'",
+  "image_prompts": ["prompt 1", "prompt 2", "prompt 3", "prompt 4"],
   "style": "estilo visual",
-  "duration_target": 15
+  "duration_target": 20
 }}
 """
     data = generate_json(SYSTEM_PROMPT, user_msg)
@@ -97,18 +112,19 @@ Temas anteriores (para no repetir ángulo):
 {json.dumps(recent, ensure_ascii=False) if recent else '[]'}
 
 Genera guión + prompts para EXACTAMENTE este tema.
-15 segundos, ~40 palabras de narración, 3 image prompts.
-Genera DOBLE guión: castellano (acento España) + inglés (acento americano).
+20 segundos, 45-55 palabras, 4 image prompts.
+El guión CASTELLANO debe terminar SIEMPRE con "Te lo dice, arroba finanzas jpg."
+Formato consejo: "Haz X → porque Y → conseguirás Z" con datos reales.
 
 JSON exacto:
 {{
   "topic": "{topic}",
   "hook": "frase gancho (máx 8 palabras)",
-  "narration": "guión de 15s (~40 palabras) en CASTELLANO de España",
-  "narration_en": "script 15s (~40 words) in American English",
-  "image_prompts": ["prompt 1 inglés", "prompt 2 inglés", "prompt 3 inglés"],
+  "narration": "guión 20s (45-55 palabras) CASTELLANO España, termina con 'Te lo dice, arroba finanzas jpg.'",
+  "narration_en": "script 20s (45-55 words) American English, ends with 'Brought to you by at finanzas jpg.'",
+  "image_prompts": ["prompt 1", "prompt 2", "prompt 3", "prompt 4"],
   "style": "estilo visual",
-  "duration_target": 15
+  "duration_target": 20
 }}
 """
     data = generate_json(SYSTEM_PROMPT + "\n" + TOPIC_PROMPT, user_msg)

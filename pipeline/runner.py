@@ -119,7 +119,7 @@ def generate_video(decision: VideoDecision, job_id: str, langs: list[str] | None
     timer._log(f"Tiempo estimado total: ~{timer.estimated_total()}")
 
     try:
-        prompts = decision.image_prompts[:5]
+        prompts = decision.image_prompts[:4]
         img_dir = tmp / "images"
         img_dir.mkdir(parents=True, exist_ok=True)
 
