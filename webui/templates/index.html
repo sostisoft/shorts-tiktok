@@ -142,7 +142,7 @@
                 <div class="model-row" id="langRow">
                     <div class="model-opt sel" data-lang="es" onclick="selectLang(this)">
                         <div class="m-name">Espanol</div>
-                        <div class="m-desc">Castellano, voz masculina grave (em_alex). Speed 0.85.</div>
+                        <div class="m-desc">Castellano, AlvaroNeural (Edge TTS, pitch -7Hz).</div>
                     </div>
                     <div class="model-opt" data-lang="en" onclick="selectLang(this)">
                         <div class="m-name">English</div>
@@ -153,6 +153,19 @@
                         <div class="m-desc">Genera version ES + EN del mismo video.</div>
                     </div>
                 </div>
+            </div>
+            <!-- Script editor -->
+            <div style="margin-bottom:10px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+                    <div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.5px">Guion (JSON manual o vacio para IA)</div>
+                    <div style="display:flex;gap:4px">
+                        <button class="btn-s btn-o" onclick="loadTemplate()">Plantilla</button>
+                        <button class="btn-s btn-o" onclick="validateScript()">Validar</button>
+                        <button class="btn-s btn-o" onclick="clearScript()">Limpiar</button>
+                    </div>
+                </div>
+                <textarea id="scriptEditor" spellcheck="false" style="width:100%;height:200px;background:#06060c;color:var(--txt);border:1px solid var(--brd);border-radius:6px;padding:10px;font-family:'JetBrains Mono','Fira Code',monospace;font-size:10px;line-height:1.5;resize:vertical" placeholder='Deja vacio para que la IA genere el guion, o pega tu JSON aqui...'></textarea>
+                <div id="scriptStatus" style="font-size:9px;margin-top:4px;min-height:14px"></div>
             </div>
             <!-- Pipeline progress -->
             <div id="genArea">
@@ -349,12 +362,16 @@ async function doGenerate(){
     const n=parseInt(document.getElementById('genCount').value)||1;
     const est=MODEL_INFO[selectedModel].time;
     const langLabel={es:'Espanol',en:'English',both:'ES+EN'}[selectedLang];
-    if(!confirm(`Lanzar ${n} generacion(es)\nModelo: ${selectedModel==='wan21'?'Wan2.1 14B':'Ken Burns'}\nIdioma: ${langLabel}\nTiempo: ${est} por video`))return;
+    const script=validateScript();
+    const src=script?`Guion: "${script.title}"`:'Guion: IA automatica';
+    if(!confirm(`Lanzar ${n} generacion(es)\n${src}\nModelo: ${selectedModel==='wan21'?'Wan2.1 14B':'Ken Burns'}\nIdioma: ${langLabel}\nTiempo: ${est} por video`))return;
     genStart=new Date();curStep="init";curProgress=0;
     document.getElementById('genArea').innerHTML='<div style="color:var(--ac2);text-align:center">Encolando...</div>';
     try{
         const langs=selectedLang==='both'?['es','en']:[selectedLang];
-        const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({count:n,model:selectedModel,langs:langs})});
+        const body={count:n,model:selectedModel,langs:langs};
+        if(script)body.script=script;
+        const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
         const d=await r.json();if(d.error){alert(d.error);genStart=null;}
     }catch(e){alert('Error: '+e.message);genStart=null;}
 }
@@ -378,6 +395,39 @@ function selectLang(el){
     document.querySelectorAll('#langRow .model-opt').forEach(e=>e.classList.remove('sel'));
     el.classList.add('sel');
     selectedLang=el.dataset.lang;
+}
+
+// ── Script editor ──
+const SCRIPT_TEMPLATE = {
+  "title": "Titulo del video (max 60 chars)",
+  "description": "Descripcion SEO para YouTube #FinanzasPersonales #Shorts",
+  "narration": "Escribe aqui la narracion completa en castellano. 55-65 palabras. Termina siempre con: Te lo dice, arroba finanzas jota pe ge.",
+  "scenes": [
+    {"text": "Frase pantalla 1", "image_prompt": "Cinematic photo of person checking savings account on smartphone, warm lighting, shallow depth of field, vertical 9:16"},
+    {"text": "Frase pantalla 2", "image_prompt": "Stack of euro coins growing progressively taller on marble desk, cinematic lighting, vertical 9:16"},
+    {"text": "Frase pantalla 3", "image_prompt": "Financial chart showing upward growth trend on monitor screen, blue tones, cinematic, vertical 9:16"},
+    {"text": "Frase pantalla 4", "image_prompt": "Person smiling confidently holding piggy bank, warm golden light, cinematic portrait, vertical 9:16"}
+  ],
+  "tags": ["#FinanzasPersonales", "#DineroInteligente", "#Shorts"]
+};
+function loadTemplate(){document.getElementById('scriptEditor').value=JSON.stringify(SCRIPT_TEMPLATE,null,2);validateScript();}
+function clearScript(){document.getElementById('scriptEditor').value='';document.getElementById('scriptStatus').innerHTML='';}
+function validateScript(){
+    const el=document.getElementById('scriptEditor'),st=document.getElementById('scriptStatus');
+    const txt=el.value.trim();
+    if(!txt){st.innerHTML='<span style="color:var(--t2)">Vacio — la IA generara el guion</span>';return null;}
+    try{
+        const d=JSON.parse(txt);
+        const errs=[];
+        if(!d.title)errs.push('falta title');
+        if(!d.narration)errs.push('falta narration');
+        if(!d.scenes||!d.scenes.length)errs.push('falta scenes[]');
+        else d.scenes.forEach((s,i)=>{if(!s.image_prompt)errs.push(`scene ${i+1}: falta image_prompt`);});
+        const wc=d.narration?d.narration.split(/\s+/).length:0;
+        if(errs.length){st.innerHTML=`<span style="color:var(--red)">${errs.join(', ')}</span>`;return null;}
+        st.innerHTML=`<span style="color:var(--grn)">OK — ${d.scenes.length} escenas, ${wc} palabras, "${d.title}"</span>`;
+        return d;
+    }catch(e){st.innerHTML=`<span style="color:var(--red)">JSON invalido: ${e.message}</span>`;return null;}
 }
 
 // ── Pending videos ──

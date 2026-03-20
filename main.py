@@ -1,6 +1,8 @@
+import json
 import logging
 import os
 import sys
+from pathlib import Path
 from dotenv import load_dotenv
 from apscheduler.schedulers.blocking import BlockingScheduler
 from db.models import init_db
@@ -36,7 +38,17 @@ def main():
         cmd = sys.argv[1].lower()
         if cmd == "generate":
             logger.info("Generación manual iniciada")
-            job_id = generate_only()
+            # Si existe un script JSON pendiente, usarlo en lugar del LLM
+            script_file = Path("output/.pending_script.json")
+            script = None
+            if script_file.exists():
+                try:
+                    script = json.loads(script_file.read_text())
+                    script_file.unlink()
+                    logger.info(f"Usando guion manual: {script.get('title', '?')}")
+                except Exception as e:
+                    logger.error(f"Error leyendo script manual: {e}")
+            job_id = generate_only(script=script)
             if job_id:
                 logger.info(f"Generado: {job_id}")
             else:

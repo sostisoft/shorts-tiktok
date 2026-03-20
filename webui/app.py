@@ -316,6 +316,10 @@ def _run_generate(item):
     try:
         resume_id = item.get("resume_job_id")
         cmd_args = [RUN_SH, "resume", resume_id] if resume_id else [RUN_SH, "generate"]
+        # Si hay script manual, guardarlo para que main.py lo lea
+        if item.get("script"):
+            script_file = Path(OUTPUT_PATH) / ".pending_script.json"
+            script_file.write_text(json.dumps(item["script"], ensure_ascii=False, indent=2))
         env = {**os.environ}
         if item.get("langs"):
             env["VIDEOBOT_LANGS"] = ",".join(item["langs"])
@@ -365,11 +369,13 @@ def api_generate():
         if len(active) >= 5:
             return jsonify({"error": "Max 5 en cola"}), 409
     langs = data.get("langs", ["es"])
+    script = data.get("script")  # JSON manual, o None para LLM
     queued = []
     for i in range(count):
         name = f"gen-{datetime.now().strftime('%H%M%S')}-{i}"
         item = {"name": name, "status": "queued", "queued_at": datetime.now().isoformat(),
-                "started_at": None, "finished_at": None, "pid": None, "langs": langs}
+                "started_at": None, "finished_at": None, "pid": None, "langs": langs,
+                "script": script}
         with gen_lock:
             gen_queue_items.append(item)
             if len(gen_queue_items) > 20:

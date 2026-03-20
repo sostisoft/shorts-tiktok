@@ -59,10 +59,10 @@ MAX_VIDEOS_PER_NIGHT = int(os.getenv("MAX_VIDEOS_PER_NIGHT", "6"))
 
 # == API publica (llamada desde main.py) ======================================
 
-def generate_only(topic: str | None = None) -> str | None:
+def generate_only(topic: str | None = None, script: dict | None = None) -> str | None:
     """Genera un video y lo registra en DB como pendiente. Devuelve el job_id."""
     try:
-        job_id = _run_generation_pipeline(topic=topic)
+        job_id = _run_generation_pipeline(topic=topic, script_override=script)
         return job_id
     except Exception as e:
         logger.error(f"generate_only fallo: {e}", exc_info=True)
@@ -149,6 +149,7 @@ def list_jobs_status() -> list[dict]:
 def _run_generation_pipeline(
     topic: str | None = None,
     resume_checkpoint: JobCheckpoint | None = None,
+    script_override: dict | None = None,
 ) -> str:
     """
     Pipeline completo: guion -> imagenes -> video IA -> TTS -> musica -> compositing -> DB.
@@ -185,6 +186,19 @@ def _run_generation_pipeline(
     if checkpoint and checkpoint.is_phase_done(1):
         logger.info("[1/6] Ya completada -- cargando guion desde checkpoint")
         script = checkpoint.data["script"]
+    elif script_override:
+        logger.info("[1/6] Usando guion manual (pasado por web)")
+        script = script_override
+        t1 = time.time()
+        if checkpoint is None:
+            checkpoint = JobCheckpoint.create(job_id, script.get("title", ""), script)
+            work_dir = checkpoint.job_dir
+        else:
+            checkpoint.data["script"] = script
+        script_path = work_dir / "phase_01_script.json"
+        with open(script_path, "w") as f:
+            json_lib.dump(script, f, ensure_ascii=False, indent=2)
+        checkpoint.complete_phase(1, "phase_01_script.json", time.time() - t1)
     else:
         logger.info("[1/6] Generando guion...")
         if checkpoint:
