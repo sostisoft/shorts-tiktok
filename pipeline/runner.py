@@ -8,8 +8,8 @@ from pathlib import Path
 from agents.orchestrator import VideoDecision
 from pipeline.image_gen import ImageGenerator
 from pipeline.image_bank import generate_with_cache, save_to_bank
-from pipeline.video_gen import VideoGenerator
-from pipeline.tts_engine import TTSEngine
+from pipeline.kenburns import KenBurnsGenerator
+from pipeline.tts import TTSGenerator
 from pipeline.music_gen import MusicGenerator
 from pipeline import editor
 from pipeline.timer import PipelineTimer
@@ -17,9 +17,9 @@ from pipeline.timer import PipelineTimer
 logger = logging.getLogger("videobot")
 
 image_gen = ImageGenerator(model="schnell")
-video_gen = VideoGenerator()
-tts_engine = TTSEngine()
-music_gen = MusicGenerator()
+video_gen = KenBurnsGenerator()
+tts_engine = TTSGenerator()
+music_gen = MusicGenerator(device="cuda")
 
 MUSIC_PATH = Path("assets/music/finance_background.mp3")
 
@@ -56,6 +56,23 @@ class FileLock:
 
 
 gpu_lock = FileLock(GPU_LOCK_FILE)
+
+
+def _loop_clip(input_path: Path, output_path: Path, target_seconds: float = 5):
+    """Loopea un clip corto hasta alcanzar target_seconds usando ffmpeg."""
+    import subprocess
+    # Usar stream_loop para repetir el clip y cortar a la duración objetivo
+    cmd = [
+        "ffmpeg", "-y",
+        "-stream_loop", "-1",
+        "-i", str(input_path),
+        "-t", str(target_seconds),
+        "-c:v", "libx264", "-crf", "18", "-preset", "fast",
+        "-pix_fmt", "yuv420p",
+        "-an",
+        str(output_path),
+    ]
+    subprocess.run(cmd, check=True, capture_output=True)
 
 
 def _load_checkpoint(tmp: Path) -> dict:
@@ -102,7 +119,7 @@ def generate_video(decision: VideoDecision, job_id: str) -> Path:
     timer._log(f"Tiempo estimado total: ~{timer.estimated_total()}")
 
     try:
-        prompts = decision.image_prompts[:3]
+        prompts = decision.image_prompts[:5]
         img_dir = tmp / "images"
         img_dir.mkdir(parents=True, exist_ok=True)
 
@@ -119,19 +136,18 @@ def generate_video(decision: VideoDecision, job_id: str) -> Path:
                 if start_step < 1:
                     timer.start_phase("FLUX imagenes")
                     timer._log(f"Generando {len(prompts)} imagenes (FLUX schnell, 768x1344)...")
-                    image_paths = image_gen.generate(prompts, job_id, img_dir)
+                    image_paths = image_gen.generate_batch(prompts, img_dir, width=768, height=1344)
                     _save_checkpoint(tmp, 1, image_paths=image_paths, clip_paths=[])
                     timer.end_phase("FLUX imagenes")
                 else:
                     image_paths = [Path(p) for p in cp.get("image_paths", [])]
                     timer._log("Imagenes ya generadas, saltando")
 
-                # Liberar FLUX de VRAM antes de cargar Wan2.1
-                image_gen.unload()
+                # FLUX se libera automáticamente en generate_batch()
 
-                # ── Paso 2: Animar con Wan2.1 ──
+                # ── Paso 2: Animar clips (Ken Burns o Wan2.1) ──
                 timer.start_phase("Wan2.1 animacion")
-                timer._log(f"Animando {len(image_paths)} imagenes con Wan2.1 (GPU, 480x832, 10 steps)...")
+                timer._log(f"Animando {len(image_paths)} imagenes (Ken Burns)...")
                 clip_paths = []
                 for i, (img_path, prompt) in enumerate(zip(image_paths, prompts)):
                     clip_path = tmp / f"clip_{i:02d}.mp4"
@@ -173,10 +189,8 @@ def generate_video(decision: VideoDecision, job_id: str) -> Path:
             timer.start_phase("MusicGen")
             timer._log("Generando musica de fondo (MusicGen GPU)...")
             music_gen.generate(
-                topic=decision.topic,
-                style=decision.style,
                 output_path=music_path,
-                duration_seconds=17,
+                duration_seconds=10,  # 10s — se loopea en el mix con ffmpeg
             )
             _save_checkpoint(tmp, 4, image_paths=image_paths, clip_paths=clip_paths)
             timer.end_phase("MusicGen")

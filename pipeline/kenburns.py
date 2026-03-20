@@ -12,19 +12,22 @@ from pathlib import Path
 logger = logging.getLogger("videobot.kenburns")
 
 # Efectos disponibles — cada uno es un filtro FFmpeg zoompan
+# Usamos expresiones suaves basadas en on/d para evitar jitter subpixel.
+# La clave es calcular posiciones absolutas (no incrementales) para que
+# ffmpeg interpole sin acumular errores de redondeo.
 EFFECTS = [
-    # Zoom in lento al centro
-    "zoompan=z='min(zoom+0.0015,1.3)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={w}x{h}:fps={fps}",
-    # Zoom in a la parte superior
-    "zoompan=z='min(zoom+0.0015,1.3)':x='iw/2-(iw/zoom/2)':y='if(eq(on,0),0,y)':d={frames}:s={w}x{h}:fps={fps}",
-    # Zoom out desde el centro
-    "zoompan=z='if(lte(zoom,1.0),1.3,max(1.001,zoom-0.0015))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={w}x{h}:fps={fps}",
-    # Pan izquierda a derecha
-    "zoompan=z='1.15':x='if(lte(on,1),0,x+1)':y='ih/2-(ih/zoom/2)':d={frames}:s={w}x{h}:fps={fps}",
+    # Zoom in lento al centro (1.0 → 1.25)
+    "zoompan=z='1+0.25*on/{frames}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={w}x{h}:fps={fps}",
+    # Zoom in a la parte superior (1.0 → 1.25)
+    "zoompan=z='1+0.25*on/{frames}':x='iw/2-(iw/zoom/2)':y='0':d={frames}:s={w}x{h}:fps={fps}",
+    # Zoom out desde el centro (1.25 → 1.0)
+    "zoompan=z='1.25-0.25*on/{frames}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={w}x{h}:fps={fps}",
+    # Pan izquierda a derecha (suave con interpolación lineal)
+    "zoompan=z='1.15':x='(iw-iw/zoom)*on/{frames}':y='ih/2-(ih/zoom/2)':d={frames}:s={w}x{h}:fps={fps}",
     # Pan derecha a izquierda
-    "zoompan=z='1.15':x='if(lte(on,1),iw,x-1)':y='ih/2-(ih/zoom/2)':d={frames}:s={w}x{h}:fps={fps}",
-    # Zoom in a esquina inferior derecha
-    "zoompan=z='min(zoom+0.0015,1.3)':x='iw-(iw/zoom)':y='ih-(ih/zoom)':d={frames}:s={w}x{h}:fps={fps}",
+    "zoompan=z='1.15':x='(iw-iw/zoom)*(1-on/{frames})':y='ih/2-(ih/zoom/2)':d={frames}:s={w}x{h}:fps={fps}",
+    # Zoom in a esquina inferior derecha (1.0 → 1.25)
+    "zoompan=z='1+0.25*on/{frames}':x='iw-(iw/zoom)':y='ih-(ih/zoom)':d={frames}:s={w}x{h}:fps={fps}",
 ]
 
 

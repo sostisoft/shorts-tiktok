@@ -33,10 +33,11 @@ gen_lock = threading.Lock()
 
 PIPELINE_STEPS = [
     ("Iniciando", "init"), ("Guion LLM", "decide"),
-    ("FLUX Img 1/3", "img1"), ("FLUX Img 2/3", "img2"), ("FLUX Img 3/3", "img3"),
-    ("Wan2.1 Clip 1/3", "anim1"), ("Wan2.1 Clip 2/3", "anim2"), ("Wan2.1 Clip 3/3", "anim3"),
-    ("Concat", "concat"), ("TTS", "tts"), ("MusicGen", "music"),
-    ("Mix Audio", "mix"), ("Subtitulos", "subs"), ("Outro", "cta"), ("Completado", "done"),
+    ("FLUX Imagenes", "flux"), ("Ken Burns Clips", "clips"),
+    ("Concat", "concat"), ("MusicGen", "music"),
+    ("TTS ES", "tts_es"), ("Mix ES", "mix_es"), ("Subs ES", "subs_es"), ("Outro ES", "cta_es"),
+    ("TTS EN", "tts_en"), ("Mix EN", "mix_en"), ("Subs EN", "subs_en"), ("Outro EN", "cta_en"),
+    ("Completado", "done"),
 ]
 
 
@@ -44,17 +45,39 @@ def parse_step(log_text):
     text = log_text.lower()
     step, progress = "init", 0
     patterns = [
-        (r"iniciando.*pipeline|generaci[oó]n manual", "init", 3),
-        (r"generando gui[oó]n|\[1/6\]|gui[oó]n generado", "decide", 7),
-        (r"\[2/6\]|flux|imagen 1/", "img1", 15),
-        (r"imagen 2/", "img2", 22), (r"imagen 3/|im[aá]genes generadas", "img3", 28),
-        (r"\[4/6\]|animando|clip 1/|wan2", "anim1", 36),
-        (r"clip 2/", "anim2", 46), (r"clip 3/|clips.*generados", "anim3", 56),
-        (r"concatena|\[3/6\]", "concat", 62),
-        (r"\[3/6\].*voz|tts|kokoro|chatterbox", "tts", 68),
-        (r"\[5/6\]|musicgen|m[uú]sica de fondo", "music", 75),
-        (r"mezclando|mix.audio", "mix", 82),
-        (r"subt[ií]tulo", "subs", 87), (r"cta|outro", "cta", 92),
+        (r"iniciando.*pipeline|generaci[oó]n manual|tiempo estimado", "init", 2),
+        (r"generando gui[oó]n|\[1/6\]|gui[oó]n generado", "decide", 5),
+        # FLUX images (5 images = 8-35%)
+        (r"flux|generando.*imagenes.*flux", "flux", 8),
+        (r"imagen 1/|frame_00|img_00", "flux", 12),
+        (r"imagen 2/|frame_01|img_01", "flux", 17),
+        (r"imagen 3/|frame_02|img_02", "flux", 22),
+        (r"imagen 4/|frame_03|img_03", "flux", 27),
+        (r"imagen 5/|frame_04|img_04|⏱ flux", "flux", 35),
+        # Ken Burns / Wan2.1 clips
+        (r"animando|ken burns|wan2", "clips", 37),
+        (r"clip 1/", "clips", 39),
+        (r"clip 2/", "clips", 41),
+        (r"clip 3/", "clips", 43),
+        (r"clip 4/", "clips", 45),
+        (r"clip 5/|⏱ wan2|⏱ ken", "clips", 48),
+        # Concat + Music
+        (r"concatena", "concat", 50),
+        (r"musicgen|m[uú]sica de fondo", "music", 55),
+        (r"⏱ musicgen", "music", 60),
+        # ES version
+        (r"versi[oó]n es", "tts_es", 62),
+        (r"tts es|kokoro.*dora|chatterbox.*es", "tts_es", 65),
+        (r"mix audio es", "mix_es", 70),
+        (r"subt[ií]tulos es", "subs_es", 75),
+        (r"outro es", "cta_es", 78),
+        # EN version
+        (r"versi[oó]n en", "tts_en", 80),
+        (r"tts en|kokoro.*sarah|chatterbox.*en", "tts_en", 83),
+        (r"mix audio en", "mix_en", 87),
+        (r"subt[ií]tulos en", "subs_en", 91),
+        (r"outro en", "cta_en", 94),
+        # Done
         (r"pipeline.*completo|completado en", "done", 100),
     ]
     for pat, s, p in patterns:

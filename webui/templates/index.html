@@ -179,10 +179,12 @@
 </div>
 <script>
 const STEPS=[
-    {id:"init",l:"Inicio"},{id:"decide",l:"LLM"},{id:"img1",l:"Img1"},{id:"img2",l:"Img2"},{id:"img3",l:"Img3"},
-    {id:"anim1",l:"Clip1"},{id:"anim2",l:"Clip2"},{id:"anim3",l:"Clip3"},
-    {id:"concat",l:"Cat"},{id:"tts",l:"TTS"},{id:"music",l:"Music"},
-    {id:"mix",l:"Mix"},{id:"subs",l:"Subs"},{id:"cta",l:"Outro"},{id:"done",l:"OK"}
+    {id:"init",l:"Inicio",t:"~5s"},{id:"decide",l:"LLM",t:"~10s"},
+    {id:"flux",l:"FLUX x5",t:"~7min"},{id:"clips",l:"Clips x5",t:"~3s"},
+    {id:"concat",l:"Concat",t:"~1s"},{id:"music",l:"Music",t:"~18s"},
+    {id:"tts_es",l:"TTS ES",t:"~14s"},{id:"mix_es",l:"Mix ES",t:"~8s"},{id:"subs_es",l:"Subs ES",t:"~15s"},{id:"cta_es",l:"CTA ES",t:"~8s"},
+    {id:"tts_en",l:"TTS EN",t:"~14s"},{id:"mix_en",l:"Mix EN",t:"~8s"},{id:"subs_en",l:"Subs EN",t:"~15s"},{id:"cta_en",l:"CTA EN",t:"~8s"},
+    {id:"done",l:"OK",t:""}
 ];
 let genStart=null, curStep="init", curProgress=0;
 
@@ -240,7 +242,11 @@ function colorize(text){
 
 function renderSteps(cur){
     const i=STEPS.findIndex(s=>s.id===cur);
-    return STEPS.map((s,j)=>`<span class="pill${j<i?' done':j===i?' active':''}">${s.l}</span>`).join('');
+    return STEPS.map((s,j)=>{
+        const cls=j<i?'done':j===i?'active':'';
+        const time=s.t&&j===i?` <span style="font-size:7px;opacity:.7">${s.t}</span>`:'';
+        return `<span class="pill${cls?' '+cls:''}" title="${s.t}">${s.l}${time}</span>`;
+    }).join('');
 }
 
 function updatePipeline(){
@@ -355,7 +361,7 @@ async function loadPending(){
         grid.innerHTML=vids.map(v=>`
             <div class="vid-card">
                 <div class="vid-preview">
-                    <video src="${v.url}" preload="metadata" muted playsinline></video>
+                    <video src="${v.url}" preload="metadata" playsinline></video>
                 </div>
                 <div class="vid-info">
                     <div class="vid-name">${v.name}</div>
