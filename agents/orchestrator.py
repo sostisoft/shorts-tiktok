@@ -38,17 +38,18 @@ FORMATO DE GANCHO (primeros 2 segundos):
 - Pregunta directa ("¿Cuánto pierdes al año por no hacer esto?")
 - Afirmación provocadora ("Tu banco gana más con tu dinero que tú.")
 
-GUIÓN: Exactamente 45-55 palabras. Debe leerse en 18 segundos a ritmo pausado.
+GUIÓN: Exactamente 55-65 palabras. Se leerá a ritmo pausado y con peso.
 Estructura:
-  - GANCHO (2s): Dato o pregunta que pare el scroll
-  - CONSEJO (13s): Acción concreta + razón + resultado esperado con números reales.
-    Formato: "Haz esto → porque pasa esto → y conseguirás esto."
-    Incluye euros, porcentajes, plazos concretos.
-  - CIERRE (5s): Frase de cierre + SIEMPRE terminar con "Te lo dice, arroba finanzas jpg."
+  - GANCHO (3s): Dato impactante o pregunta con número que pare el scroll
+  - CONSEJO (14s): Acción concreta paso a paso + razón + resultado con números reales.
+    Formato: "Haz esto → porque pasa esto → y en X tiempo conseguirás esto."
+    Incluye euros, porcentajes, plazos concretos. Sé específico.
+  - CIERRE (3s): SIEMPRE terminar con "Te lo dice, arroba finanzas jota pe ge."
 
 IMPORTANTE: La última frase del guión SIEMPRE debe ser literalmente:
-"Te lo dice, arroba finanzas jpg."
+"Te lo dice, arroba finanzas jota pe ge."
 Esta frase es la firma del canal y NUNCA debe faltar.
+Escribe "jota pe ge" en letras, NO "jpg" — es para TTS y debe pronunciarse.
 
 IMAGEN PROMPTS: 4 escenas realistas, estilo cinematográfico.
 SIEMPRE en inglés, muy descriptivos (50-80 palabras cada uno).
@@ -75,17 +76,17 @@ Hoy es {date.today().strftime('%A %d de %B de %Y')}.
 TEMAS YA PUBLICADOS — PROHIBIDO repetir:
 {json.dumps(recent_topics, ensure_ascii=False) if recent_topics else '["(ninguno todavía)"]'}
 
-Decide el siguiente vídeo. EXACTAMENTE 20 segundos, 45-55 palabras, 4 image prompts.
-El guión CASTELLANO debe terminar SIEMPRE con "Te lo dice, arroba finanzas jpg."
-El guión INGLÉS debe terminar con "Brought to you by at finanzas jpg."
-Formato consejo: "Haz X → porque Y → conseguirás Z" con datos reales.
+Decide el siguiente vídeo. EXACTAMENTE 20 segundos, 55-65 palabras, 4 image prompts.
+El guión CASTELLANO debe terminar SIEMPRE con "Te lo dice, arroba finanzas jota pe ge."
+El guión INGLÉS debe terminar con "Brought to you by at finanzas j p g."
+Formato consejo: "Haz X → porque Y → en Z tiempo conseguirás W" con datos reales.
 
 JSON exacto:
 {{
   "topic": "título descriptivo ÚNICO",
   "hook": "frase gancho (máx 8 palabras)",
-  "narration": "guión 20s (45-55 palabras) CASTELLANO España, termina con 'Te lo dice, arroba finanzas jpg.'",
-  "narration_en": "script 20s (45-55 words) American English, ends with 'Brought to you by at finanzas jpg.'",
+  "narration": "guión 20s (55-65 palabras) CASTELLANO España, termina con 'Te lo dice, arroba finanzas jota pe ge.'",
+  "narration_en": "script 20s (55-65 words) American English, ends with 'Brought to you by at finanzas j p g.'",
   "image_prompts": ["prompt 1", "prompt 2", "prompt 3", "prompt 4"],
   "style": "estilo visual",
   "duration_target": 20

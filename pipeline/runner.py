@@ -204,23 +204,22 @@ def generate_video(decision: VideoDecision, job_id: str, langs: list[str] | None
             langs = ["es"]
 
         all_langs = [
-            ("es", decision.narration, "em_alex", "es"),
-            ("en", decision.narration_en, "af_sarah", "en"),
+            ("es", decision.narration, "es"),
+            ("en", decision.narration_en, "en"),
         ]
 
         results = {}
-        for lang, narration_text, voice, suffix in all_langs:
+        for lang, narration_text, suffix in all_langs:
             if lang not in langs:
                 continue
             lang_upper = lang.upper()
             timer._log(f"=== Versión {lang_upper} ===")
 
-            # TTS — voz masculina española más grave y pausada
+            # TTS — Edge TTS AlvaroNeural (castellano)
             narration_audio = tmp / f"narration_{suffix}.wav"
             if not narration_audio.exists():
                 timer.start_phase(f"TTS {lang_upper}")
-                spd = 0.85 if lang == "es" else 0.9
-                tts_engine.generate(narration_text, narration_audio, voice=voice, speed=spd)
+                tts_engine.generate(narration_text, narration_audio)
                 timer.end_phase(f"TTS {lang_upper}")
 
             # Mix audio (vídeo + narración + música)

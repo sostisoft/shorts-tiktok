@@ -1,10 +1,11 @@
 """
 pipeline/tts.py
-Text-to-Speech con Chatterbox (23 idiomas, clonación de voz).
-Corre 100% en CPU — no compite con GPU durante la generación de video.
+Text-to-Speech con Edge TTS (Microsoft Neural, AlvaroNeural castellano).
 """
+import asyncio
 import logging
 import os
+import subprocess
 import time
 from pathlib import Path
 
@@ -13,37 +14,25 @@ import soundfile as sf
 
 logger = logging.getLogger("videobot.tts")
 
-# Voz por defecto: español de España (neutro, profesional)
-DEFAULT_VOICE = os.getenv("TTS_VOICE", "es")
-VOICE_SAMPLE = os.getenv("TTS_VOICE_SAMPLE", "")  # Ruta a audio de muestra para clonación
+# Voz por defecto: Alvaro (castellano España, masculino, neural)
+DEFAULT_VOICE = "es-ES-AlvaroNeural"
+DEFAULT_RATE = "+0%"
+DEFAULT_PITCH = "-7Hz"
 
 
 class TTSGenerator:
-    """
-    Genera audio de voz en off a partir de texto.
-    Usa Chatterbox TTS con soporte multiidioma.
-    """
-
-    def __init__(self, voice: str = DEFAULT_VOICE):
-        self.voice = voice
-        self._model = None
-
-    def _load(self):
-        if self._model is not None:
-            return
-        logger.info("Cargando Kokoro TTS (CPU)...")
-        self._model = "kokoro"
+    """Genera audio de voz en off con Edge TTS (Microsoft Neural)."""
 
     def generate(
         self,
         text: str,
         output_path: str | Path | None = None,
-        voice: str = None,
-        speed: float = 0.85,
+        voice: str = DEFAULT_VOICE,
+        rate: str = DEFAULT_RATE,
+        pitch: str = DEFAULT_PITCH,
+        **kwargs,
     ) -> Path:
-        """Genera audio de voz en off con Kokoro TTS."""
-        self._load()
-
+        """Genera audio de voz en off."""
         if output_path is None:
             out_dir = Path("output/tmp")
             out_dir.mkdir(parents=True, exist_ok=True)
@@ -52,63 +41,39 @@ class TTSGenerator:
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         t0 = time.time()
+        mp3_path = output_path.with_suffix(".mp3")
 
-        kokoro_voice = voice or "em_alex"
-        self._generate_kokoro(text, output_path, kokoro_voice, speed)
+        try:
+            asyncio.run(self._generate_edge(text, str(mp3_path), voice, rate, pitch))
+            # Convertir mp3 -> wav para compatibilidad con el pipeline
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", str(mp3_path), str(output_path)],
+                capture_output=True, check=True,
+            )
+            mp3_path.unlink(missing_ok=True)
+            logger.info(f"TTS generado en {time.time()-t0:.1f}s -> {output_path} ({len(text)} chars)")
+        except Exception as e:
+            logger.error(f"Edge TTS error: {e}")
+            mp3_path.unlink(missing_ok=True)
+            self._generate_silence(output_path, duration_secs=len(text) / 12)
 
-        logger.info(f"TTS generado en {time.time()-t0:.1f}s → {output_path} ({len(text)} chars)")
         return output_path
 
-    def _generate_kokoro(self, text: str, output_path: Path, voice: str = "ef_dora", speed: float = 0.9):
-        """Genera TTS con Kokoro en un subproceso para aislar GPU/MIOpen."""
-        import subprocess, sys, json as _json
-        try:
-            # Ejecutar en subproceso con GPU oculta — evita conflictos MIOpen
-            script = f'''
-import os
-os.environ["HIP_VISIBLE_DEVICES"] = "-1"
-os.environ["ROCR_VISIBLE_DEVICES"] = "-1"
-import numpy as np
-import soundfile as sf
-from kokoro import KPipeline
-lang = "e" if "{voice}".startswith("e") else "a"
-pipeline = KPipeline(lang_code=lang)
-generator = pipeline("""{text.replace('"', '\\"')}""", voice="{voice}", speed={speed})
-samples = []
-for _, _, audio in generator:
-    if hasattr(audio, "numpy"):
-        audio = audio.numpy()
-    samples.append(audio)
-if samples:
-    combined = np.concatenate(samples)
-    sf.write("{output_path}", combined, samplerate=24000)
-    print(f"OK {{len(combined)/24000:.1f}}s")
-else:
-    print("EMPTY")
-'''
-            result = subprocess.run(
-                [sys.executable, "-c", script],
-                capture_output=True, text=True, timeout=120,
-                env={**os.environ, "HIP_VISIBLE_DEVICES": "-1", "ROCR_VISIBLE_DEVICES": "-1"},
-            )
-            if result.returncode != 0:
-                logger.error(f"Kokoro subprocess error: {result.stderr[-500:]}")
-                self._generate_silence(output_path, duration_secs=len(text) / 15)
-            elif "EMPTY" in result.stdout:
-                self._generate_silence(output_path)
-            else:
-                logger.info(f"Kokoro: {result.stdout.strip()}")
-        except Exception as e:
-            logger.error(f"Error Kokoro: {e}")
-            self._generate_silence(output_path, duration_secs=len(text) / 15)
+    @staticmethod
+    async def _generate_edge(text: str, output_path: str, voice: str, rate: str, pitch: str):
+        import edge_tts
+        comm = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
+        await comm.save(output_path)
 
-    def _generate_silence(self, output_path: Path, duration_secs: float = 30.0):
-        """Genera silencio como último recurso."""
+    @staticmethod
+    def _generate_silence(output_path: Path, duration_secs: float = 20.0):
+        """Genera silencio como ultimo recurso."""
         logger.warning(f"Generando silencio ({duration_secs:.1f}s) como fallback TTS")
         silence = np.zeros(int(24000 * duration_secs), dtype=np.float32)
         sf.write(str(output_path), silence, samplerate=24000)
 
-    def get_duration(self, audio_path: str | Path) -> float:
-        """Devuelve la duración en segundos de un fichero de audio."""
+    @staticmethod
+    def get_duration(audio_path: str | Path) -> float:
+        """Devuelve la duracion en segundos de un fichero de audio."""
         data, samplerate = sf.read(str(audio_path))
         return len(data) / samplerate
