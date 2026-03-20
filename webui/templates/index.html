@@ -136,6 +136,24 @@
                 </div>
                 <div id="modelNote" style="font-size:9px;color:var(--t2);margin-top:6px">Ken Burns: FLUX genera 5 imagenes (~7 min) + zoom/pan instantaneo + TTS + musica. Total ~8 min.</div>
             </div>
+            <!-- Language selector -->
+            <div style="margin-bottom:10px">
+                <div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Idioma</div>
+                <div class="model-row" id="langRow">
+                    <div class="model-opt sel" data-lang="es" onclick="selectLang(this)">
+                        <div class="m-name">Espanol</div>
+                        <div class="m-desc">Castellano, voz masculina grave (em_alex). Speed 0.85.</div>
+                    </div>
+                    <div class="model-opt" data-lang="en" onclick="selectLang(this)">
+                        <div class="m-name">English</div>
+                        <div class="m-desc">American English, female voice (af_sarah). Speed 0.9.</div>
+                    </div>
+                    <div class="model-opt" data-lang="both" onclick="selectLang(this)">
+                        <div class="m-name">Ambos</div>
+                        <div class="m-desc">Genera version ES + EN del mismo video.</div>
+                    </div>
+                </div>
+            </div>
             <!-- Pipeline progress -->
             <div id="genArea">
                 <div style="color:var(--t2);text-align:center;font-size:11px">Sin generaciones activas</div>
@@ -330,11 +348,13 @@ async function loadVideos(){
 async function doGenerate(){
     const n=parseInt(document.getElementById('genCount').value)||1;
     const est=MODEL_INFO[selectedModel].time;
-    if(!confirm(`Lanzar ${n} generacion(es) con ${selectedModel==='wan21'?'Wan2.1 14B':'Ken Burns'}?\nTiempo estimado: ${est} por video`))return;
+    const langLabel={es:'Espanol',en:'English',both:'ES+EN'}[selectedLang];
+    if(!confirm(`Lanzar ${n} generacion(es)\nModelo: ${selectedModel==='wan21'?'Wan2.1 14B':'Ken Burns'}\nIdioma: ${langLabel}\nTiempo: ${est} por video`))return;
     genStart=new Date();curStep="init";curProgress=0;
     document.getElementById('genArea').innerHTML='<div style="color:var(--ac2);text-align:center">Encolando...</div>';
     try{
-        const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({count:n,model:selectedModel})});
+        const langs=selectedLang==='both'?['es','en']:[selectedLang];
+        const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({count:n,model:selectedModel,langs:langs})});
         const d=await r.json();if(d.error){alert(d.error);genStart=null;}
     }catch(e){alert('Error: '+e.message);genStart=null;}
 }
@@ -346,10 +366,18 @@ const MODEL_INFO={
 };
 let selectedModel='kenburns';
 function selectModel(el){
-    document.querySelectorAll('.model-opt').forEach(e=>e.classList.remove('sel'));
+    document.querySelectorAll('#modelRow .model-opt').forEach(e=>e.classList.remove('sel'));
     el.classList.add('sel');
     selectedModel=el.dataset.model;
     document.getElementById('modelNote').textContent=MODEL_INFO[selectedModel].note;
+}
+
+// ── Language selector ──
+let selectedLang='es';
+function selectLang(el){
+    document.querySelectorAll('#langRow .model-opt').forEach(e=>e.classList.remove('sel'));
+    el.classList.add('sel');
+    selectedLang=el.dataset.lang;
 }
 
 // ── Pending videos ──

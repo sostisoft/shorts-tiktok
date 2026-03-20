@@ -316,9 +316,13 @@ def _run_generate(item):
     try:
         resume_id = item.get("resume_job_id")
         cmd_args = [RUN_SH, "resume", resume_id] if resume_id else [RUN_SH, "generate"]
+        env = {**os.environ}
+        if item.get("langs"):
+            env["VIDEOBOT_LANGS"] = ",".join(item["langs"])
         proc = subprocess.Popen(
             cmd_args, cwd=str(PROJECT_DIR),
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+            env=env,
         )
         item["pid"] = proc.pid
         for line in proc.stdout:
@@ -360,11 +364,12 @@ def api_generate():
         active = [i for i in gen_queue_items if i["status"] in ("queued", "running")]
         if len(active) >= 5:
             return jsonify({"error": "Max 5 en cola"}), 409
+    langs = data.get("langs", ["es"])
     queued = []
     for i in range(count):
         name = f"gen-{datetime.now().strftime('%H%M%S')}-{i}"
         item = {"name": name, "status": "queued", "queued_at": datetime.now().isoformat(),
-                "started_at": None, "finished_at": None, "pid": None}
+                "started_at": None, "finished_at": None, "pid": None, "langs": langs}
         with gen_lock:
             gen_queue_items.append(item)
             if len(gen_queue_items) > 20:

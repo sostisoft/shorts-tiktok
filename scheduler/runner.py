@@ -263,6 +263,8 @@ def _run_generation_pipeline(
             voice_path = tts.generate(
                 text=narration,
                 output_path=work_dir / "voice.wav",
+                voice="em_alex",
+                speed=0.85,
             )
             duration_3 = time.time() - t3
             checkpoint.complete_phase(3, "voice.wav", duration_3)

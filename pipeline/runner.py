@@ -90,7 +90,7 @@ def _save_checkpoint(tmp: Path, step: int, **kwargs):
     (tmp / "checkpoint.json").write_text(json.dumps(cp))
 
 
-def generate_video(decision: VideoDecision, job_id: str) -> Path:
+def generate_video(decision: VideoDecision, job_id: str, langs: list[str] | None = None) -> Path:
     """
     Pipeline con checkpointing + GPU lock + logging con ETA.
 
@@ -196,23 +196,31 @@ def generate_video(decision: VideoDecision, job_id: str) -> Path:
             timer.end_phase("MusicGen")
 
         # ════════════════════════════════════════
-        # Generar 2 versiones: ES + EN
+        # Generar versiones por idioma
         # Mismas imágenes/clips/música, distinta voz y subtítulos
         # ════════════════════════════════════════
 
-        results = {}
-        for lang, narration_text, voice, suffix in [
-            ("es", decision.narration, "ef_dora", "es"),
+        if langs is None:
+            langs = ["es"]
+
+        all_langs = [
+            ("es", decision.narration, "em_alex", "es"),
             ("en", decision.narration_en, "af_sarah", "en"),
-        ]:
+        ]
+
+        results = {}
+        for lang, narration_text, voice, suffix in all_langs:
+            if lang not in langs:
+                continue
             lang_upper = lang.upper()
             timer._log(f"=== Versión {lang_upper} ===")
 
-            # TTS
+            # TTS — voz masculina española más grave y pausada
             narration_audio = tmp / f"narration_{suffix}.wav"
             if not narration_audio.exists():
                 timer.start_phase(f"TTS {lang_upper}")
-                tts_engine.generate(narration_text, narration_audio, voice=voice)
+                spd = 0.85 if lang == "es" else 0.9
+                tts_engine.generate(narration_text, narration_audio, voice=voice, speed=spd)
                 timer.end_phase(f"TTS {lang_upper}")
 
             # Mix audio (vídeo + narración + música)
@@ -239,21 +247,24 @@ def generate_video(decision: VideoDecision, job_id: str) -> Path:
             results[suffix] = final
 
         # ── Mover a pending ──
-        output_es = Path(f"output/pending/{job_id}_es.mp4")
-        output_en = Path(f"output/pending/{job_id}_en.mp4")
-        output_es.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(results["es"], output_es)
-        shutil.copy(results["en"], output_en)
+        first_output = None
+        for suffix, final in results.items():
+            out = Path(f"output/pending/{job_id}_{suffix}.mp4")
+            out.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(final, out)
+            if first_output is None:
+                first_output = out
 
         total_s = timer.finish()
-        timer._log(f"Videos: {output_es} + {output_en}")
-        return output_es
+        timer._log(f"Videos: {', '.join(str(Path(f'output/pending/{job_id}_{s}.mp4')) for s in results)}")
+        return first_output
 
     except Exception:
         logger.info(f"[{job_id}] Error — checkpoint guardado para reanudar")
         raise
 
     finally:
-        output_es = Path(f"output/pending/{job_id}_es.mp4")
-        if output_es.exists():
+        # Limpiar tmp si al menos un video se generó
+        any_output = any(Path(f"output/pending/{job_id}_{s}.mp4").exists() for s in (langs or ["es"]))
+        if any_output:
             shutil.rmtree(tmp, ignore_errors=True)
