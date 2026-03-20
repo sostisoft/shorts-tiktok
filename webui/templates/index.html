@@ -45,6 +45,28 @@
         .st-ok{color:var(--grn);font-weight:700}.st-err{color:var(--red);font-weight:700}.st-pen{color:var(--yel);font-weight:700}
         .twrap{max-height:350px;overflow-y:auto}
         .elapsed{font-size:10px;color:var(--t2);margin-left:6px;font-variant-numeric:tabular-nums}
+        /* Video grid */
+        .vid-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+        .vid-card{background:var(--s2);border:1px solid var(--brd);border-radius:8px;overflow:hidden;transition:.2s}
+        .vid-card:hover{border-color:var(--acc);transform:translateY(-2px)}
+        .vid-preview{position:relative;width:100%;aspect-ratio:9/16;background:#000;display:flex;align-items:center;justify-content:center}
+        .vid-preview video{width:100%;height:100%;object-fit:cover}
+        .vid-info{padding:8px 10px}
+        .vid-name{font-size:11px;font-weight:700;color:var(--txt);word-break:break-all}
+        .vid-meta{font-size:9px;color:var(--t2);margin-top:2px;display:flex;justify-content:space-between;align-items:center}
+        .vid-actions{display:flex;gap:4px;margin-top:6px}
+        .vid-actions a,.vid-actions button{flex:1}
+        .btn-dl{display:inline-flex;align-items:center;justify-content:center;gap:4px;background:var(--acc);color:#fff;border:none;padding:5px 8px;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer;text-decoration:none;transition:.2s}
+        .btn-dl:hover{background:var(--ac2)}
+        .btn-play{display:inline-flex;align-items:center;justify-content:center;gap:4px;background:none;border:1px solid var(--brd);color:var(--t2);padding:5px 8px;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer;transition:.2s}
+        .btn-play:hover{border-color:var(--acc);color:var(--ac2)}
+        .vid-empty{grid-column:1/-1;text-align:center;color:var(--t2);font-size:11px;padding:20px}
+        /* Model selector */
+        .model-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+        .model-opt{background:var(--s2);border:1px solid var(--brd);border-radius:8px;padding:8px 12px;cursor:pointer;transition:.2s;flex:1;min-width:140px}
+        .model-opt:hover{border-color:var(--acc)}.model-opt.sel{border-color:var(--acc);background:rgba(99,102,241,.1)}
+        .model-opt .m-name{font-size:12px;font-weight:700;color:var(--txt)}.model-opt .m-desc{font-size:9px;color:var(--t2);margin-top:2px}
+        .model-opt .m-time{font-size:10px;color:var(--org);font-weight:700;margin-top:3px}
     </style>
 </head>
 <body>
@@ -96,8 +118,28 @@
             <span>Generacion en Curso</span>
             <span id="jobInfo" style="color:var(--t2);text-transform:none;letter-spacing:0">Idle</span>
         </div>
-        <div class="card-b" id="genArea">
-            <div style="color:var(--t2);text-align:center;font-size:11px">Sin generaciones activas</div>
+        <div class="card-b">
+            <!-- Model selector -->
+            <div style="margin-bottom:10px">
+                <div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Modelo de video</div>
+                <div class="model-row" id="modelRow">
+                    <div class="model-opt sel" data-model="kenburns" onclick="selectModel(this)">
+                        <div class="m-name">Ken Burns</div>
+                        <div class="m-desc">Zoom/pan cinematografico sobre imagenes FLUX. Rapido y estable.</div>
+                        <div class="m-time">~8 min total</div>
+                    </div>
+                    <div class="model-opt" data-model="wan21" onclick="selectModel(this)">
+                        <div class="m-name">Wan2.1 14B</div>
+                        <div class="m-desc">IA generativa real (imagen→video). Movimiento natural. Requiere mucha VRAM.</div>
+                        <div class="m-time">~45 min total</div>
+                    </div>
+                </div>
+                <div id="modelNote" style="font-size:9px;color:var(--t2);margin-top:6px">Ken Burns: FLUX genera 5 imagenes (~7 min) + zoom/pan instantaneo + TTS + musica. Total ~8 min.</div>
+            </div>
+            <!-- Pipeline progress -->
+            <div id="genArea">
+                <div style="color:var(--t2);text-align:center;font-size:11px">Sin generaciones activas</div>
+            </div>
         </div>
     </div>
     <!-- Logs -->
@@ -114,7 +156,19 @@
             <div class="log" id="logBox">Conectando WebSocket...</div>
         </div>
     </div>
-    <!-- Videos -->
+    <!-- Videos Pendientes -->
+    <div class="card">
+        <div class="card-h">
+            <span>Videos Pendientes</span>
+            <button class="btn-s btn-o" onclick="loadPending()">Refrescar</button>
+        </div>
+        <div class="card-b">
+            <div id="pendingGrid" class="vid-grid">
+                <div style="color:var(--t2);text-align:center;font-size:11px">Cargando...</div>
+            </div>
+        </div>
+    </div>
+    <!-- Historico -->
     <div class="card">
         <div class="card-h">Historico de Videos</div>
         <div class="card-b">
@@ -269,17 +323,60 @@ async function loadVideos(){
 
 async function doGenerate(){
     const n=parseInt(document.getElementById('genCount').value)||1;
-    if(!confirm(`Lanzar ${n} generacion(es)?`))return;
+    const est=MODEL_INFO[selectedModel].time;
+    if(!confirm(`Lanzar ${n} generacion(es) con ${selectedModel==='wan21'?'Wan2.1 14B':'Ken Burns'}?\nTiempo estimado: ${est} por video`))return;
     genStart=new Date();curStep="init";curProgress=0;
     document.getElementById('genArea').innerHTML='<div style="color:var(--ac2);text-align:center">Encolando...</div>';
     try{
-        const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({count:n})});
+        const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({count:n,model:selectedModel})});
         const d=await r.json();if(d.error){alert(d.error);genStart=null;}
     }catch(e){alert('Error: '+e.message);genStart=null;}
 }
 
-loadStatus();loadVideos();
+// ── Model selector ──
+const MODEL_INFO={
+    kenburns:{note:'Ken Burns: FLUX genera 5 imagenes (~7 min) + zoom/pan instantaneo + TTS + musica. Total ~8 min.',time:'~8 min'},
+    wan21:{note:'Wan2.1 14B: FLUX genera 5 imagenes (~7 min) + Wan2.1 I2V por clip (~6 min x5) + TTS + musica. Total ~45 min. Necesita ~60 GB VRAM.',time:'~45 min'}
+};
+let selectedModel='kenburns';
+function selectModel(el){
+    document.querySelectorAll('.model-opt').forEach(e=>e.classList.remove('sel'));
+    el.classList.add('sel');
+    selectedModel=el.dataset.model;
+    document.getElementById('modelNote').textContent=MODEL_INFO[selectedModel].note;
+}
+
+// ── Pending videos ──
+async function loadPending(){
+    const grid=document.getElementById('pendingGrid');
+    try{
+        const vids=await(await fetch('/videos/pending')).json();
+        if(!vids.length){grid.innerHTML='<div class="vid-empty">No hay videos pendientes</div>';return;}
+        grid.innerHTML=vids.map(v=>`
+            <div class="vid-card">
+                <div class="vid-preview">
+                    <video src="${v.url}" preload="metadata" muted playsinline></video>
+                </div>
+                <div class="vid-info">
+                    <div class="vid-name">${v.name}</div>
+                    <div class="vid-meta"><span>${v.size_mb} MB</span></div>
+                    <div class="vid-actions">
+                        <button class="btn-play" onclick="togglePlay(this)">▶ Play</button>
+                        <a class="btn-dl" href="${v.url}" download>↓ Descargar</a>
+                    </div>
+                </div>
+            </div>`).join('');
+    }catch(e){grid.innerHTML=`<div class="vid-empty" style="color:var(--red)">Error: ${e.message}</div>`;}
+}
+function togglePlay(btn){
+    const vid=btn.closest('.vid-card').querySelector('video');
+    if(vid.paused){vid.play();btn.textContent='⏸ Pause';}
+    else{vid.pause();btn.textContent='▶ Play';}
+}
+
+loadStatus();loadVideos();loadPending();
 setInterval(loadVideos,30000);
+setInterval(loadPending,30000);
 </script>
 </body>
 </html>

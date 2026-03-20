@@ -11,7 +11,7 @@ import sqlite3
 import time
 from pathlib import Path
 from datetime import datetime
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, send_from_directory, abort
 from flask_socketio import SocketIO, emit
 
 app = Flask(__name__)
@@ -258,6 +258,30 @@ def api_videos():
         return jsonify([])
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/videos/pending/<filename>")
+def serve_pending_video(filename):
+    """Sirve un video de output/pending/ por URL."""
+    pending_dir = Path(OUTPUT_PATH) / "pending"
+    if not (pending_dir / filename).is_file():
+        abort(404)
+    return send_from_directory(str(pending_dir), filename)
+
+
+@app.route("/videos/pending")
+def list_pending_videos():
+    """Lista todos los videos pendientes con sus URLs."""
+    pending_dir = Path(OUTPUT_PATH) / "pending"
+    if not pending_dir.exists():
+        return jsonify([])
+    videos = sorted(pending_dir.glob("*.mp4"), key=lambda f: f.stat().st_mtime, reverse=True)
+    base = request.host_url.rstrip("/")
+    return jsonify([
+        {"name": v.name, "size_mb": round(v.stat().st_size / 1048576, 1),
+         "url": f"{base}/videos/pending/{v.name}"}
+        for v in videos
+    ])
 
 
 # ── Generation ──
