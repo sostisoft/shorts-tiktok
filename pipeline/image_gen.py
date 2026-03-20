@@ -60,6 +60,26 @@ class ImageGenerator:
         torch.cuda.empty_cache()
         logger.info("GPU liberada")
 
+    def _decode_latents_cpu(self, latents, height, width):
+        """Decodifica latents con el VAE en CPU — ROCm gfx1151 cuelga en GPU."""
+        import numpy as np
+        logger.info("  VAE decode en CPU...")
+        vae_scale = self.pipe.vae_scale_factor
+        # Unpack latents (FLUX empaqueta en formato especial)
+        latents = self.pipe._unpack_latents(latents, height, width, vae_scale)
+        latents = (latents / self.pipe.vae.config.scaling_factor) + self.pipe.vae.config.shift_factor
+        # Mover VAE a CPU para decode
+        vae = self.pipe.vae.to("cpu", dtype=torch.float32)
+        latents_cpu = latents.to("cpu", dtype=torch.float32)
+        with torch.no_grad():
+            decoded = vae.decode(latents_cpu, return_dict=False)[0]
+        # Volver VAE a GPU para la siguiente imagen
+        self.pipe.vae = vae.to("cuda", dtype=torch.bfloat16)
+        # Convertir a PIL
+        decoded = decoded.squeeze(0).permute(1, 2, 0).numpy()
+        decoded = ((decoded + 1) / 2 * 255).clip(0, 255).astype(np.uint8)
+        return Image.fromarray(decoded)
+
     # ── Generación ────────────────────────────────────────────────────────────
 
     def generate_single(
@@ -81,9 +101,10 @@ class ImageGenerator:
                 height=height,
                 num_inference_steps=steps,
                 guidance_scale=guidance,
-                output_type="pil",
+                output_type="latent",
             )
-            image: Image.Image = result.images[0]
+            # VAE decode en CPU — cuelga en ROCm gfx1151
+            image = self._decode_latents_cpu(result.images, height, width)
 
             if output_path is None:
                 out_dir = Path("output/tmp")
@@ -122,10 +143,11 @@ class ImageGenerator:
                     height=height,
                     num_inference_steps=steps,
                     guidance_scale=0.0,
-                    output_type="pil",
+                    output_type="latent",
                 )
+                image = self._decode_latents_cpu(result.images, height, width)
                 path = output_dir / f"frame_{i:02d}_{os.urandom(3).hex()}.png"
-                result.images[0].save(str(path), format="PNG")
+                image.save(str(path), format="PNG")
                 paths.append(path)
                 logger.info(f"  → {path}")
         finally:

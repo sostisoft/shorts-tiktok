@@ -60,14 +60,13 @@ class VideoGenerator:
             torch_dtype=dtype,
         )
 
-        # En UMA 128 GB: cpu_offload para el 14B (necesita >120 GB para attention)
-        # Con el 1.3B futuro: pipe.to("cuda") directo
-        self.pipe.enable_sequential_cpu_offload()
+        # UMA 128 GB: pipe.to("cuda") directo — NUNCA cpu_offload (lentísimo)
+        self.pipe = self.pipe.to("cuda")
 
         # VAE en float32 — más estable en ROCm
         self.pipe.vae = self.pipe.vae.to(dtype=torch.float32)
 
-        # Reducir pico de memoria
+        # Reducir pico de memoria en attention
         self.pipe.enable_attention_slicing(1)
         try:
             self.pipe.vae.enable_tiling()
@@ -91,14 +90,17 @@ class VideoGenerator:
 
         image = Image.open(image_path).convert("RGB")
         # 480x832 portrait (9:16) — resolución nativa Wan2.1
-        num_frames = duration_seconds * 16 + 1  # 81 frames for 5s@16fps
+        # Wan2.1 14B: attention cuadrática en frames
+        # 25 frames (~1.5s) es el sweet spot para 128GB UMA + velocidad razonable
+        max_frames = 25
+        num_frames = min(duration_seconds * 16 + 1, max_frames)
 
         motion_prompt = (
             f"smooth cinematic camera movement, subtle motion, "
             f"professional documentary style, {prompt}"
         )
 
-        total_steps = 15
+        total_steps = 6  # 6 steps suficiente para calidad Shorts (vs 15)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         logger.info(f"  Animando {image_path.name} → {output_path.name} "
