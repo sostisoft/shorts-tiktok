@@ -33,17 +33,30 @@ logger = logging.getLogger("videobot.runner")
 # Motor de vídeo: "kenburns" (rápido, FFmpeg) o "wan21" (IA, GPU, lento)
 VIDEO_ENGINE = os.getenv("VIDEO_ENGINE", "kenburns")
 
+# Fuente de vídeo: "ai" (FLUX + Ken Burns/Wan2.1) o "stock" (Pexels/Pixabay)
+VIDEO_SOURCE = os.getenv("VIDEO_SOURCE", "ai")
+
+# Fuente de musica: "tracks" (royalty-free locales) o "musicgen" (IA generativa)
+MUSIC_SOURCE = os.getenv("MUSIC_SOURCE", "tracks")
+
 
 def _get_video_generator():
     """Devuelve el generador de vídeo según la configuración."""
     if VIDEO_ENGINE == "wan21":
         from pipeline.video_gen import VideoGenerator
-        logger.info(f"Motor de vídeo: Wan2.1 I2V (GPU, lento, IA)")
+        logger.info("Motor de vídeo: Wan2.1 I2V (GPU, lento, IA)")
         return VideoGenerator()
     else:
         from pipeline.kenburns import KenBurnsGenerator
-        logger.info(f"Motor de vídeo: Ken Burns (FFmpeg, rápido, sin GPU)")
+        logger.info("Motor de vídeo: Ken Burns (FFmpeg, rápido, sin GPU)")
         return KenBurnsGenerator()
+
+
+def _get_stock_provider():
+    """Devuelve el proveedor de stock footage."""
+    from pipeline.stock_video import StockVideoProvider
+    logger.info("Fuente de vídeo: Stock footage (Pexels/Pixabay)")
+    return StockVideoProvider()
 
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", "output"))
 PENDING_DIR = OUTPUT_DIR / "pending"
@@ -59,14 +72,32 @@ MAX_VIDEOS_PER_NIGHT = int(os.getenv("MAX_VIDEOS_PER_NIGHT", "6"))
 
 # == API publica (llamada desde main.py) ======================================
 
-def generate_only(topic: str | None = None, script: dict | None = None) -> str | None:
-    """Genera un video y lo registra en DB como pendiente. Devuelve el job_id."""
+def generate_only(
+    topic: str | None = None,
+    script: dict | None = None,
+    video_source: str | None = None,
+) -> str | None:
+    """Genera un video y lo registra en DB como pendiente. Devuelve el job_id.
+
+    Args:
+        topic: tema a generar (None = automatico)
+        script: guion pre-generado (None = generar con LLM)
+        video_source: "ai" o "stock" (None = usar VIDEO_SOURCE de env)
+    """
+    # Override temporal de VIDEO_SOURCE si se especifica
+    if video_source:
+        global VIDEO_SOURCE
+        original = VIDEO_SOURCE
+        VIDEO_SOURCE = video_source
     try:
         job_id = _run_generation_pipeline(topic=topic, script_override=script)
         return job_id
     except Exception as e:
         logger.error(f"generate_only fallo: {e}", exc_info=True)
         return None
+    finally:
+        if video_source:
+            VIDEO_SOURCE = original
 
 
 def resume_job(job_id: str | None = None) -> str | None:
@@ -236,8 +267,19 @@ def _run_generation_pipeline(
     logger.info(f"  Titulo: {title}")
     logger.info(f"  Escenas: {len(scenes)}")
 
-    # == 2. Imagenes (FLUX Schnell) ============================================
-    if checkpoint.is_phase_done(2):
+    # == 2. Imagenes (FLUX Schnell) — solo en modo AI ========================
+    # En modo stock, esta fase se salta (los clips se descargan directamente en fase 4)
+    use_stock = VIDEO_SOURCE == "stock"
+
+    if use_stock:
+        image_paths = []
+        if not checkpoint.is_phase_done(2):
+            logger.info("[2/6] Modo STOCK: saltando generacion de imagenes")
+            checkpoint.start_phase(2)
+            # Crear directorio vacio para que el checkpoint no falle
+            (work_dir / "images").mkdir(parents=True, exist_ok=True)
+            checkpoint.complete_phase(2, "images", 0.0)
+    elif checkpoint.is_phase_done(2):
         logger.info("[2/6] Ya completada -- cargando imagenes desde checkpoint")
         images_dir = work_dir / checkpoint.get_phase_output(2)
         image_paths = sorted(images_dir.glob("*.png"))
@@ -288,11 +330,30 @@ def _run_generation_pipeline(
     voice_duration = tts_for_duration.get_duration(voice_path)
     logger.info(f"  Voz: {voice_duration:.1f}s")
 
-    # == 4. Video IA (Wan2.1 I2V) ==============================================
+    # == 4. Video (IA o Stock) =================================================
     if checkpoint.is_phase_done(4):
         logger.info("[4/6] Ya completada -- cargando clips desde checkpoint")
         clip_dir = work_dir / checkpoint.get_phase_output(4)
         clip_paths = sorted(clip_dir.glob("*.mp4"))
+    elif use_stock:
+        logger.info("[4/6] Descargando clips de stock footage (Pexels/Pixabay)...")
+        checkpoint.start_phase(4)
+        t4 = time.time()
+        try:
+            stock = _get_stock_provider()
+            clip_dir = work_dir / "clips"
+            clip_paths = stock.get_clips_for_scenes(
+                scenes=scenes,
+                output_dir=clip_dir,
+                clip_duration=5,
+            )
+            stock.unload()
+            duration_4 = time.time() - t4
+            checkpoint.complete_phase(4, "clips", duration_4)
+            logger.info(f"  {len(clip_paths)} clips stock descargados en {duration_4:.1f}s")
+        except Exception as e:
+            checkpoint.fail_phase(4, str(e))
+            raise
     else:
         logger.info(f"[4/6] Generando clips de video ({VIDEO_ENGINE})...")
         checkpoint.start_phase(4)
@@ -321,17 +382,29 @@ def _run_generation_pipeline(
         logger.info("[5/6] Ya completada -- cargando musica desde checkpoint")
         music_path = work_dir / checkpoint.get_phase_output(5)
     else:
-        logger.info("[5/6] Generando musica de fondo con MusicGen...")
         checkpoint.start_phase(5)
         t5 = time.time()
         try:
-            music_gen = MusicGenerator()
-            music_path = music_gen.generate(
-                duration_seconds=voice_duration + 3,
-                output_path=work_dir / "music.wav",
-            )
+            use_musicgen = MUSIC_SOURCE == "musicgen"
+            tracks_dir = Path("assets/music/tracks")
+            tracks = list(tracks_dir.glob("*.mp3"))
+
+            if not use_musicgen and tracks:
+                import random
+                chosen = random.choice(tracks)
+                logger.info(f"[5/6] Usando track: {chosen.name}")
+                import shutil as _sh
+                music_path = work_dir / "music.mp3"
+                _sh.copy2(chosen, music_path)
+            else:
+                logger.info(f"[5/6] Generando con MusicGen (MUSIC_SOURCE={MUSIC_SOURCE})...")
+                music_gen = MusicGenerator()
+                music_path = music_gen.generate(
+                    duration_seconds=voice_duration + 3,
+                    output_path=work_dir / "music.wav",
+                )
             duration_5 = time.time() - t5
-            checkpoint.complete_phase(5, "music.wav", duration_5)
+            checkpoint.complete_phase(5, music_path.name, duration_5)
         except Exception as e:
             checkpoint.fail_phase(5, str(e))
             raise
@@ -350,6 +423,7 @@ def _run_generation_pipeline(
             subtitle_segments = VideoComposer.build_subtitle_segments_from_narration(
                 narration_text=narration,
                 total_duration=voice_duration,
+                voice_path=voice_path,
             )
 
             final_path = PENDING_DIR / f"{job_id}.mp4"

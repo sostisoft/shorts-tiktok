@@ -11,6 +11,7 @@ import sqlite3
 import time
 from pathlib import Path
 from datetime import datetime
+import requests
 from flask import Flask, render_template, jsonify, request, send_from_directory, abort
 from flask_socketio import SocketIO, emit
 
@@ -54,13 +55,17 @@ def parse_step(log_text):
         (r"imagen 3/|frame_02|img_02", "flux", 22),
         (r"imagen 4/|frame_03|img_03", "flux", 27),
         (r"imagen 5/|frame_04|img_04|⏱ flux", "flux", 35),
-        # Ken Burns / Wan2.1 clips
+        # Ken Burns / Wan2.1 / Stock clips
         (r"animando|ken burns|wan2", "clips", 37),
-        (r"clip 1/", "clips", 39),
-        (r"clip 2/", "clips", 41),
-        (r"clip 3/", "clips", 43),
-        (r"clip 4/", "clips", 45),
-        (r"clip 5/|⏱ wan2|⏱ ken", "clips", 48),
+        (r"descargando clips.*stock|pexels|pixabay", "clips", 37),
+        (r"modo stock.*saltando", "flux", 35),
+        (r"clip 1/|clip_00", "clips", 39),
+        (r"clip 2/|clip_01", "clips", 41),
+        (r"clip 3/|clip_02", "clips", 43),
+        (r"clip 4/|clip_03", "clips", 45),
+        (r"clip 5/|clip_04|⏱ wan2|⏱ ken|clips stock descargados", "clips", 48),
+        (r"cache hit", "clips", 40),
+        (r"descargado.*mb|guardado en cache", "clips", 44),
         # Concat + Music
         (r"concatena", "concat", 50),
         (r"musicgen|m[uú]sica de fondo", "music", 55),
@@ -315,12 +320,28 @@ def _run_generate(item):
     socketio.emit("job_update", {"name": item["name"], "status": "running", "started_at": item["started_at"]})
     try:
         resume_id = item.get("resume_job_id")
-        cmd_args = [RUN_SH, "resume", resume_id] if resume_id else [RUN_SH, "generate"]
+        video_source = item.get("video_source", "ai")
+        if resume_id:
+            cmd_args = [RUN_SH, "resume", resume_id]
+        elif video_source == "stock":
+            cmd_args = [RUN_SH, "generate-stock"]
+        else:
+            cmd_args = [RUN_SH, "generate"]
         # Si hay script manual, guardarlo para que main.py lo lea
         if item.get("script"):
             script_file = Path(OUTPUT_PATH) / ".pending_script.json"
             script_file.write_text(json.dumps(item["script"], ensure_ascii=False, indent=2))
-        env = {**os.environ}
+        # Cargar .env fresco para cada generación (captura cambios hechos desde la web)
+        from dotenv import dotenv_values
+        dot_env = dotenv_values(str(PROJECT_DIR / ".env"))
+        env = {**os.environ, **dot_env}
+        if item.get("tts_engine"):
+            env["TTS_ENGINE"] = item["tts_engine"]
+        if item.get("video_engine"):
+            env["VIDEO_ENGINE"] = item["video_engine"]
+        if item.get("music_source"):
+            env["MUSIC_SOURCE"] = item["music_source"]
+        env["VIDEO_SOURCE"] = item.get("video_source", "ai")
         if item.get("langs"):
             env["VIDEOBOT_LANGS"] = ",".join(item["langs"])
         proc = subprocess.Popen(
@@ -370,12 +391,17 @@ def api_generate():
             return jsonify({"error": "Max 5 en cola"}), 409
     langs = data.get("langs", ["es"])
     script = data.get("script")  # JSON manual, o None para LLM
+    video_source = data.get("video_source", "ai")  # "ai" o "stock"
+    video_engine = data.get("video_engine", "kenburns")  # "kenburns" o "wan21"
+    tts_engine = data.get("tts_engine", "edge")  # "edge" o "elevenlabs"
+    music_source = data.get("music_source", "tracks")  # "tracks" o "musicgen"
     queued = []
     for i in range(count):
         name = f"gen-{datetime.now().strftime('%H%M%S')}-{i}"
         item = {"name": name, "status": "queued", "queued_at": datetime.now().isoformat(),
                 "started_at": None, "finished_at": None, "pid": None, "langs": langs,
-                "script": script}
+                "script": script, "video_source": video_source, "video_engine": video_engine,
+                "tts_engine": tts_engine, "music_source": music_source}
         with gen_lock:
             gen_queue_items.append(item)
             if len(gen_queue_items) > 20:
@@ -507,6 +533,30 @@ def api_resume(job_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/jobs/<job_id>/reset-phases", methods=["POST"])
+def api_reset_phases(job_id):
+    """Resetea fases especificas de un job para regenerar."""
+    data = request.get_json()
+    phases = data.get("phases", [])
+    if not phases:
+        return jsonify({"error": "No phases specified"}), 400
+    # Validar que son numeros 1-6
+    phases = [int(p) for p in phases if 1 <= int(p) <= 6]
+    if not phases:
+        return jsonify({"error": "Fases invalidas (deben ser 1-6)"}), 400
+    try:
+        from scheduler.checkpoint import JobCheckpoint
+        cp = JobCheckpoint.load(job_id)
+        if cp.data["status"] == "running":
+            return jsonify({"error": "Job en ejecucion, no se puede resetear"}), 409
+        cp.reset_phases(phases)
+        return jsonify({"ok": True, "message": f"Fases {phases} reseteadas", "job_id": job_id})
+    except FileNotFoundError:
+        return jsonify({"error": f"Job {job_id} no encontrado"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/jobs/<job_id>", methods=["DELETE"])
 def api_jobs_delete(job_id):
     """Elimina un job fallido de disco."""
@@ -519,6 +569,136 @@ def api_jobs_delete(job_id):
         return jsonify({"ok": True, "message": f"Job {job_id} eliminado"})
     except FileNotFoundError:
         return jsonify({"error": f"Job {job_id} no encontrado"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ── TTS Config ──
+
+@app.route("/api/tts/config")
+def api_tts_config():
+    """Returns current TTS configuration."""
+    from dotenv import dotenv_values
+    env = dotenv_values(str(PROJECT_DIR / ".env"))
+    return jsonify({
+        "engine": env.get("TTS_ENGINE", "edge"),
+        "elevenlabs_key_set": bool(env.get("ELEVENLABS_API_KEY", "")),
+        "elevenlabs_voice_id": env.get("ELEVENLABS_VOICE_ID", ""),
+        "edge_voice": env.get("EDGE_VOICE", "es-ES-AlvaroNeural"),
+        "edge_rate": env.get("EDGE_RATE", "+0%"),
+        "edge_pitch": env.get("EDGE_PITCH", "-7Hz"),
+    })
+
+@app.route("/api/tts/config", methods=["POST"])
+def api_tts_config_update():
+    """Updates TTS configuration in .env file."""
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "No data"}), 400
+
+    env_path = PROJECT_DIR / ".env"
+    env_text = env_path.read_text()
+
+    # Fields that can be updated
+    updates = {}
+    if "engine" in data:
+        updates["TTS_ENGINE"] = data["engine"]
+    if "elevenlabs_key" in data and data["elevenlabs_key"]:
+        updates["ELEVENLABS_API_KEY"] = data["elevenlabs_key"]
+    if "elevenlabs_voice_id" in data:
+        updates["ELEVENLABS_VOICE_ID"] = data["elevenlabs_voice_id"]
+    if "edge_voice" in data:
+        updates["EDGE_VOICE"] = data["edge_voice"]
+    if "edge_rate" in data:
+        updates["EDGE_RATE"] = data["edge_rate"]
+    if "edge_pitch" in data:
+        updates["EDGE_PITCH"] = data["edge_pitch"]
+
+    for key, value in updates.items():
+        pattern = rf'^{re.escape(key)}=.*$'
+        replacement = f'{key}={value}'
+        if re.search(pattern, env_text, re.MULTILINE):
+            env_text = re.sub(pattern, replacement, env_text, flags=re.MULTILINE)
+        else:
+            env_text = env_text.rstrip() + f'\n{key}={value}\n'
+
+    env_path.write_text(env_text)
+
+    # Reload env vars
+    os.environ.update(updates)
+
+    return jsonify({"ok": True, "updated": list(updates.keys())})
+
+@app.route("/api/tts/voices")
+def api_tts_voices():
+    """Lists available ElevenLabs voices."""
+    from dotenv import dotenv_values
+    env = dotenv_values(str(PROJECT_DIR / ".env"))
+    api_key = env.get("ELEVENLABS_API_KEY", "")
+    if not api_key:
+        return jsonify({"error": "No ElevenLabs API key configured"}), 400
+    try:
+        r = requests.get(
+            "https://api.elevenlabs.io/v1/voices",
+            headers={"xi-api-key": api_key},
+            timeout=10,
+        )
+        r.raise_for_status()
+        voices = r.json().get("voices", [])
+        return jsonify([
+            {"voice_id": v["voice_id"], "name": v["name"],
+             "category": v.get("category", ""),
+             "labels": v.get("labels", {})}
+            for v in voices
+        ])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/tts/quota")
+def api_tts_quota():
+    """Returns ElevenLabs remaining quota."""
+    from dotenv import dotenv_values
+    env = dotenv_values(str(PROJECT_DIR / ".env"))
+    api_key = env.get("ELEVENLABS_API_KEY", "")
+    if not api_key:
+        return jsonify({"error": "No API key"}), 400
+    try:
+        r = requests.get(
+            "https://api.elevenlabs.io/v1/user/subscription",
+            headers={"xi-api-key": api_key},
+            timeout=10,
+        )
+        r.raise_for_status()
+        data = r.json()
+        return jsonify({
+            "character_count": data.get("character_count", 0),
+            "character_limit": data.get("character_limit", 0),
+            "remaining": data.get("character_limit", 0) - data.get("character_count", 0),
+            "tier": data.get("tier", "free"),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/tts/test", methods=["POST"])
+def api_tts_test():
+    """Test TTS with a short sample."""
+    data = request.get_json() or {}
+    engine = data.get("engine", "edge")
+    text = "Esto es una prueba de voz para Finanzas Claras."
+
+    import sys
+    sys.path.insert(0, str(PROJECT_DIR))
+    from pipeline.tts import TTSGenerator
+
+    test_path = Path(OUTPUT_PATH) / "tts_test.wav"
+    try:
+        tts = TTSGenerator()
+        tts.generate(text=text, output_path=test_path, engine=engine)
+        # Convert to base64 for playback in browser
+        import base64
+        audio_b64 = base64.b64encode(test_path.read_bytes()).decode()
+        test_path.unlink(missing_ok=True)
+        return jsonify({"audio": audio_b64, "format": "wav"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

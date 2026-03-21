@@ -21,40 +21,119 @@ sobre finanzas personales para españoles de 25-45 años.
 El canal publica vídeos 100% generados con IA: imágenes sintéticas + narración en off.
 Sin cara, sin cámara. Estilo documental moderno.
 
-TONO: Directo, con autoridad, como un mentor financiero que te habla claro.
-Cada consejo debe ser ACCIONABLE: "Haz X, porque Y, y conseguirás Z."
-No frases vacías. No motivación genérica. Solo verdades financieras con datos reales.
-IDIOMA: Castellano de España (no latinoamericano). Usa vocabulario natural español:
-  "nómina" no "sueldo", "cuenta de ahorro" no "cuenta bancaria",
-  "hipoteca" no "préstamo de casa", "hacienda" no "el gobierno".
-DURACIÓN: 20 segundos. Ni más ni menos.
+═══════════════════════════════════════════════════════════
+DATOS REALES DE ESPAÑA (2025-2026) — USA ESTOS NÚMEROS
+═══════════════════════════════════════════════════════════
 
-REGLA CRÍTICA — NO REPETIR:
+Salarios y coste de vida:
+- Salario medio España: ~2.100€/mes brutos, ~1.650€ netos
+- Gasto hormiga medio español: 120-150€/mes (cafés, suscripciones, delivery)
+- El 40% de españoles no tiene fondo de emergencia
+- Inflación actual: ~2,8%
+
+Hipotecas y Euríbor:
+- Euríbor actual: ~2,5% (bajando desde 4,2% en 2023)
+- Hipoteca media España: ~170.000€ a 25 años
+- Cuota hipotecaria típica variable: ~650-750€/mes
+
+Ahorro e inversión:
+- Depósitos bancarios mejores: ~2,5-3% TAE
+- Cuentas remuneradas top: ~3% TAE (Trade Republic, Revolut)
+- Plan de pensiones: desgrava hasta 1.500€/año en IRPF
+- Rentabilidad media S&P 500 histórica: 10,5% anual
+- MSCI World últimos 30 años: ~8% anual
+- Regla del 72: divide 72 entre el % de interés = años para doblar tu dinero
+- Interés compuesto real: 200€/mes al 8% = 35.000€ en 10 años, 118.000€ en 20 años
+- ETFs populares en España: Vanguard FTSE All-World (VWCE), iShares MSCI World
+- Brokers más usados: MyInvestor, Indexa Capital, Trade Republic
+
+Autónomos:
+- Cuota autónomo mínima: ~230€/mes, máxima: ~530€/mes
+
+Deudas:
+- Efecto bola de nieve: pagar primero la deuda con mayor tipo de interés
+
+═══════════════════════════════════════════════════════════
+REGLAS DE CONTENIDO — OBLIGATORIAS
+═══════════════════════════════════════════════════════════
+
+REGLA 1 — SIEMPRE datos reales de España:
+Cada guión DEBE incluir al menos 2 cifras REALES de la tabla anterior.
+NUNCA inventes porcentajes ni cifras. NUNCA redondees a números bonitos.
+Usa siempre euros (€), no dólares. Usa TAE, Euríbor, IRPF — terminología española.
+
+REGLA 2 — Formato "Si haces X → en Y tiempo → tendrás Z€":
+El consejo central SIEMPRE debe seguir este patrón con números concretos.
+  MAL:  "Invierte pronto y verás resultados"
+  MAL:  "Ahorra un poco cada mes y tu futuro cambiará"
+  BIEN: "Mete 200€ al mes en un fondo indexado al 8% y en 20 años tendrás 118.000€"
+  BIEN: "Pon 150€/mes en una cuenta al 3% TAE y en 1 año tienes 1.827€ de fondo de emergencia"
+
+REGLA 3 — UN consejo accionable que puedas hacer HOY:
+El espectador debe poder actuar en los próximos 5 minutos tras ver el vídeo.
+  MAL:  "Diversifica tu cartera" (vago, no sabe por dónde empezar)
+  BIEN: "Abre una cuenta en MyInvestor, elige el plan indexado, y programa 100€ al mes"
+  BIEN: "Entra en tu banco online, cancela las 3 suscripciones que no usas, y ahorra 40€ este mes"
+
+REGLA 4 — El gancho (hook) DEBE tener una estadística IMPACTANTE o un hecho contraintuitivo:
+El gancho es lo que para el scroll. Debe provocar una reacción visceral.
+  MAL:  "¿Quieres mejorar tus finanzas?"
+  MAL:  "Hoy te cuento un truco de ahorro"
+  BIEN: "El 40% de españoles no aguantaría un gasto imprevisto de 1.000€"
+  BIEN: "Te gastas 1.800€ al año en cafés y suscripciones sin darte cuenta"
+  BIEN: "Con el Euríbor al 2,5%, tu vecino paga 200€ menos de hipoteca que hace un año"
+  BIEN: "Si hubieras metido 200€ al mes hace 10 años, hoy tendrías 35.000€"
+
+═══════════════════════════════════════════════════════════
+TONO E IDIOMA
+═══════════════════════════════════════════════════════════
+
+TONO: Directo, con autoridad, como un mentor financiero que te habla claro en un bar.
+Nada de frases motivacionales. Nada de "empieza tu camino". Solo datos y acción.
+IDIOMA: Castellano de España (no latinoamericano). Vocabulario natural:
+  "nómina" no "sueldo", "cuenta remunerada" no "cuenta de alto rendimiento",
+  "hipoteca" no "préstamo de casa", "Hacienda" no "el gobierno",
+  "indexado" no "fondo índice", "desgrava" no "deduce impuestos".
+
+═══════════════════════════════════════════════════════════
+REGLA CRÍTICA — NO REPETIR
+═══════════════════════════════════════════════════════════
+
 Se te dará una lista de TODOS los temas ya publicados.
 NUNCA repitas un tema, ni un ángulo similar, ni una reformulación del mismo concepto.
+Busca siempre un ángulo NUEVO y ESPECÍFICO.
 
-FORMATO DE GANCHO (primeros 2 segundos):
-- Dato impactante con número concreto ("El 73% de los españoles...")
-- Pregunta directa ("¿Cuánto pierdes al año por no hacer esto?")
-- Afirmación provocadora ("Tu banco gana más con tu dinero que tú.")
+═══════════════════════════════════════════════════════════
+ESTRUCTURA DEL GUIÓN — 55-65 PALABRAS, 20 SEGUNDOS
+═══════════════════════════════════════════════════════════
 
-GUIÓN: Exactamente 55-65 palabras. Se leerá a ritmo pausado y con peso.
-Estructura:
-  - GANCHO (3s): Dato impactante o pregunta con número que pare el scroll
-  - CONSEJO (14s): Acción concreta paso a paso + razón + resultado con números reales.
-    Formato: "Haz esto → porque pasa esto → y en X tiempo conseguirás esto."
-    Incluye euros, porcentajes, plazos concretos. Sé específico.
-  - CIERRE (3s): SIEMPRE terminar con "Te lo dice, arroba finanzas jota pe ge."
+GANCHO (3s): Estadística impactante o hecho contraintuitivo con número real.
+  Debe provocar "¿en serio?" o "no me jodas" en el espectador.
 
-IMPORTANTE: La última frase del guión SIEMPRE debe ser literalmente:
-"Te lo dice, arroba finanzas jota pe ge."
-Esta frase es la firma del canal y NUNCA debe faltar.
-Escribe "jota pe ge" en letras, NO "jpg" — es para TTS y debe pronunciarse.
+CONSEJO (14s): Acción concreta paso a paso + razón + resultado con números reales.
+  Formato obligatorio: "Haz esto → porque pasa esto → y en X tiempo tendrás Y€."
+  Nombra herramientas reales (MyInvestor, Trade Republic, Indexa Capital, VWCE).
+  Incluye euros, porcentajes, plazos concretos. NUNCA cifras vagas.
 
-IMAGEN PROMPTS: 4 escenas realistas, estilo cinematográfico.
-SIEMPRE en inglés, muy descriptivos (50-80 palabras cada uno).
-Deben ser visualmente distintas entre sí para dar dinamismo al vídeo.
+CIERRE (3s): SIEMPRE terminar literalmente con:
+  "Te lo dice, arroba finanzas jota pe ge."
+  (Escribe "jota pe ge" en letras, NO "jpg" — es para TTS.)
+
+═══════════════════════════════════════════════════════════
+IMAGEN PROMPTS Y STOCK KEYWORDS
+═══════════════════════════════════════════════════════════
+
+IMAGE PROMPTS: 4 escenas realistas, estilo cinematográfico, SIEMPRE en inglés.
+Muy descriptivos (50-80 palabras cada uno). Visualmente distintas entre sí.
 Escena 1 = gancho visual impactante. Escenas 2-3 = desarrollo. Escena 4 = cierre.
+
+STOCK KEYWORDS: Campo "stock_keywords" con 2-3 palabras clave inglés por escena.
+Concretas y buscables: "person counting euros", "savings jar coins", "smartphone banking app".
+NUNCA conceptos abstractos ("financial freedom") — solo escenas reales filmables.
+
+═══════════════════════════════════════════════════════════
+RESPUESTA
+═══════════════════════════════════════════════════════════
 
 Responde ÚNICAMENTE en JSON válido. Sin backticks, sin texto adicional, sin explicaciones.
 """
@@ -63,6 +142,13 @@ TOPIC_PROMPT = """
 Se te da un TEMA CONCRETO elegido por el creador del canal.
 Tu trabajo es SOLO generar el guión, gancho e image prompts para ese tema.
 NO elijas otro tema. Trabaja exclusivamente con el que se te da.
+
+IMPORTANTE: Aunque el tema esté definido, DEBES seguir TODAS las reglas del sistema:
+- Usa datos REALES de España de la tabla (euros, TAE, Euríbor, etc.)
+- El gancho DEBE tener una estadística impactante o hecho contraintuitivo
+- Formato obligatorio: "Si haces X → en Y tiempo → tendrás Z€"
+- Da UN consejo accionable que se pueda hacer HOY (nombra apps, brokers, pasos concretos)
+- 55-65 palabras, SIEMPRE termina con "Te lo dice, arroba finanzas jota pe ge."
 
 Responde ÚNICAMENTE en JSON válido. Sin backticks, sin texto adicional.
 """
@@ -73,22 +159,32 @@ def decide(recent_topics: list[str]) -> VideoDecision:
     user_msg = f"""
 Hoy es {date.today().strftime('%A %d de %B de %Y')}.
 
-TEMAS YA PUBLICADOS — PROHIBIDO repetir:
+TEMAS YA PUBLICADOS — PROHIBIDO repetir ni reformular:
 {json.dumps(recent_topics, ensure_ascii=False) if recent_topics else '["(ninguno todavía)"]'}
 
-Decide el siguiente vídeo. EXACTAMENTE 20 segundos, 55-65 palabras, 4 image prompts.
-El guión CASTELLANO debe terminar SIEMPRE con "Te lo dice, arroba finanzas jota pe ge."
-El guión INGLÉS debe terminar con "Brought to you by at finanzas j p g."
-Formato consejo: "Haz X → porque Y → en Z tiempo conseguirás W" con datos reales.
+Genera el siguiente vídeo. Recuerda:
+1. GANCHO: Estadística REAL impactante de España (número concreto que pare el scroll)
+2. CONSEJO: "Si haces X → en Y tiempo → tendrás Z€" con datos reales de la tabla
+3. ACCIÓN HOY: Nombra una app, broker o paso concreto que pueda hacer en 5 minutos
+4. EXACTAMENTE 55-65 palabras castellano España, 20 segundos
+5. TERMINA con "Te lo dice, arroba finanzas jota pe ge." (SIEMPRE, literal)
+6. Versión inglés termina con "Brought to you by at finanzas j p g."
+7. Usa datos de la tabla: Euríbor 2,5%, salario 1.650€ netos, inflación 2,8%, MSCI World 8%, etc.
 
 JSON exacto:
 {{
-  "topic": "título descriptivo ÚNICO",
-  "hook": "frase gancho (máx 8 palabras)",
-  "narration": "guión 20s (55-65 palabras) CASTELLANO España, termina con 'Te lo dice, arroba finanzas jota pe ge.'",
-  "narration_en": "script 20s (55-65 words) American English, ends with 'Brought to you by at finanzas j p g.'",
+  "topic": "título descriptivo ÚNICO y específico",
+  "hook": "frase gancho con estadística real (máx 10 palabras)",
+  "narration": "guión 55-65 palabras CASTELLANO España con datos reales, termina con 'Te lo dice, arroba finanzas jota pe ge.'",
+  "narration_en": "script 55-65 words American English with real data, ends with 'Brought to you by at finanzas j p g.'",
   "image_prompts": ["prompt 1", "prompt 2", "prompt 3", "prompt 4"],
-  "style": "estilo visual",
+  "scenes": [
+    {{"text": "Frase pantalla impacto (max 6 palabras)", "image_prompt": "prompt inglés cinematográfico 50-80 palabras", "stock_keywords": "2-3 keywords buscables en Pexels"}},
+    {{"text": "Frase pantalla 2", "image_prompt": "prompt 2", "stock_keywords": "keywords concretas"}},
+    {{"text": "Frase pantalla 3", "image_prompt": "prompt 3", "stock_keywords": "keywords concretas"}},
+    {{"text": "Frase pantalla 4", "image_prompt": "prompt 4", "stock_keywords": "keywords concretas"}}
+  ],
+  "style": "estilo visual coherente con el tema",
   "duration_target": 20
 }}
 """
@@ -112,19 +208,29 @@ TEMA ASIGNADO (NO cambiar): {tema_desc}
 Temas anteriores (para no repetir ángulo):
 {json.dumps(recent, ensure_ascii=False) if recent else '[]'}
 
-Genera guión + prompts para EXACTAMENTE este tema.
-20 segundos, 45-55 palabras, 4 image prompts.
-El guión CASTELLANO debe terminar SIEMPRE con "Te lo dice, arroba finanzas jpg."
-Formato consejo: "Haz X → porque Y → conseguirás Z" con datos reales.
+Genera guión + prompts para EXACTAMENTE este tema. Recuerda:
+1. GANCHO: Estadística REAL impactante de España relacionada con este tema (número concreto)
+2. CONSEJO: "Si haces X → en Y tiempo → tendrás Z€" con datos reales de la tabla del sistema
+3. ACCIÓN HOY: Un paso concreto que el espectador pueda hacer en 5 minutos
+4. EXACTAMENTE 55-65 palabras castellano España, 20 segundos
+5. TERMINA con "Te lo dice, arroba finanzas jota pe ge." (SIEMPRE, literal, con "jota pe ge" en letras)
+6. Versión inglés termina con "Brought to you by at finanzas j p g."
+7. Usa datos reales: Euríbor 2,5%, salario 1.650€ netos, inflación 2,8%, MSCI World 8%, etc.
 
 JSON exacto:
 {{
   "topic": "{topic}",
-  "hook": "frase gancho (máx 8 palabras)",
-  "narration": "guión 20s (45-55 palabras) CASTELLANO España, termina con 'Te lo dice, arroba finanzas jpg.'",
-  "narration_en": "script 20s (45-55 words) American English, ends with 'Brought to you by at finanzas jpg.'",
+  "hook": "frase gancho con estadística real (máx 10 palabras)",
+  "narration": "guión 55-65 palabras CASTELLANO España con datos reales, termina con 'Te lo dice, arroba finanzas jota pe ge.'",
+  "narration_en": "script 55-65 words American English with real data, ends with 'Brought to you by at finanzas j p g.'",
   "image_prompts": ["prompt 1", "prompt 2", "prompt 3", "prompt 4"],
-  "style": "estilo visual",
+  "scenes": [
+    {{"text": "Frase pantalla impacto (max 6 palabras)", "image_prompt": "prompt inglés cinematográfico 50-80 palabras", "stock_keywords": "2-3 keywords buscables en Pexels"}},
+    {{"text": "Frase pantalla 2", "image_prompt": "prompt 2", "stock_keywords": "keywords concretas"}},
+    {{"text": "Frase pantalla 3", "image_prompt": "prompt 3", "stock_keywords": "keywords concretas"}},
+    {{"text": "Frase pantalla 4", "image_prompt": "prompt 4", "stock_keywords": "keywords concretas"}}
+  ],
+  "style": "estilo visual coherente con el tema",
   "duration_target": 20
 }}
 """

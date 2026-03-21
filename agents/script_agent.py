@@ -1,54 +1,76 @@
 """
 agents/script_agent.py
 Genera guiones para Shorts de finanzas personales.
-- Primario: Ollama local (Qwen 2.5 14B)
-- Fallback: Claude API (anthropic SDK)
+- Primario: Claude CLI (claude -p) via llm_client
+- Fallback: Ollama local (Qwen 2.5 14B)
 Output: JSON con título, descripción, escenas e imagen-prompts
 """
 import json
 import logging
-import os
 import re
 
-import requests
+from agents.llm_client import generate
 
 logger = logging.getLogger("videobot.script_agent")
 
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:14b")
-CLAUDE_MODEL = "claude-sonnet-4-20250514"
+SYSTEM_PROMPT = """Eres un guionista viral de contenido corto (TikTok, Reels, YouTube Shorts) para el canal "Finanzas Claras" (@finanzasjpg).
+Tu único objetivo: que el espectador NO deslice. Cada segundo cuenta.
 
-SYSTEM_PROMPT = """Eres el guionista de "Finanzas Claras", un canal de YouTube Shorts en castellano de España.
-Creas contenido de finanzas personales breve, directo y accionable.
-Cada consejo sigue el formato: "Haz X, porque Y, y conseguirás Z."
-Siempre respondes SOLO con JSON válido, sin texto adicional ni bloques de código markdown."""
+ESTILO:
+- Hablas en castellano de España, tono directo y cercano, como un colega que sabe de pasta.
+- Abres SIEMPRE con un gancho que duela o sorprenda: una pregunta retórica, un dato impactante, o un "error que cometes".
+- NUNCA frases motivacionales vacías. SIEMPRE cifras reales: euros, porcentajes, plazos concretos.
+- El consejo debe ser ACCIONABLE HOY: "haz esto con X€ y en Y meses tendrás Z€".
+- Cierras SIEMPRE con: "Te lo dice, arroba finanzas jpg."
 
-SCRIPT_PROMPT_TEMPLATE = """Crea un guión para un YouTube Short de finanzas personales.
+Respondes SOLO con JSON válido. Sin texto extra, sin bloques markdown, sin explicaciones."""
 
-Tema sugerido: {topic}
+SCRIPT_PROMPT_TEMPLATE = """Crea un guión VIRAL para un Short/Reel/TikTok de finanzas personales.
 
-El vídeo dura EXACTAMENTE 20 segundos. Genera un JSON con esta estructura EXACTA:
+TEMA: {topic}
+
+FORMATO DEL VÍDEO:
+- Duración: 20 segundos exactos (4 escenas × 5 segundos)
+- Vertical 9:16 (móvil a pantalla completa)
+- Subtítulos grandes estilo TikTok (las frases de "text" aparecen sobreimpresas)
+- Voz en off narrando (campo "narration")
+- Clips de vídeo stock o imágenes IA de fondo (campos "image_prompt" y "stock_keywords")
+
+ESTRUCTURA DEL GANCHO (sigue este patrón):
+1. ESCENA 1 (0-5s): GANCHO — dato que rompe esquemas o pregunta que duele. El espectador decide si se queda o desliza aquí.
+2. ESCENA 2 (5-10s): PROBLEMA — por qué esto importa, qué pierdes si no actúas.
+3. ESCENA 3 (10-15s): SOLUCIÓN — el consejo concreto con cifras reales.
+4. ESCENA 4 (15-20s): CTA — resultado + cierre "Te lo dice, arroba finanzas jpg."
+
+Genera este JSON EXACTO:
 {{
-  "title": "Título gancho para YouTube (max 60 chars)",
-  "description": "Descripción SEO para YouTube (max 200 chars, incluye hashtags)",
-  "narration": "Narración completa en castellano de España. 45-55 palabras. Tono con autoridad pero cercano. Formato: gancho con dato → consejo accionable con números → SIEMPRE terminar con 'Te lo dice, arroba finanzas jpg.'",
+  "title": "Título clickbait pero real, max 60 chars. Usa números y urgencia.",
+  "description": "Descripción SEO para YouTube, max 200 chars, con hashtags relevantes.",
+  "narration": "Narración completa, 45-55 palabras. Castellano de España. Tono: como si hablaras a un amigo en un bar pero con datos duros. TERMINA con 'Te lo dice, arroba finanzas jpg.'",
   "scenes": [
     {{
-      "text": "Frase corta que aparece en pantalla (max 6 palabras)",
-      "image_prompt": "Prompt en inglés para generar imagen con Flux. Cinematográfico, sin texto. Vertical 9:16."
+      "text": "Frase CORTA pantalla (max 5 palabras, IMPACTANTE)",
+      "image_prompt": "Cinematic photo/scene in English for AI image gen. Vertical 9:16, no text, dramatic lighting, relatable situation.",
+      "stock_keywords": "2-3 English keywords for Pexels stock video. FILMABLE real scenes, never abstract concepts (good: 'woman checking phone banking app', bad: 'financial freedom')"
     }}
   ],
-  "tags": ["#FinanzasPersonales", "#DineroInteligente", "#Shorts"]
+  "tags": ["#FinanzasPersonales", "#DineroInteligente", "#Shorts", "#TikTok"]
 }}
 
-IMPORTANTE: Genera exactamente 4 escenas. Cada escena dura 5 segundos.
-La narración SIEMPRE termina con "Te lo dice, arroba finanzas jpg." """
+REGLAS INQUEBRANTABLES:
+- Exactamente 4 escenas.
+- "text" de cada escena: MÁXIMO 5 palabras, en mayúsculas si es gancho. Piensa en lo que ves sobreimpreso en TikTok.
+- "narration": 45-55 palabras. SIEMPRE acaba con "Te lo dice, arroba finanzas jpg."
+- Cifras REALES y CONCRETAS. Nada de "mucho dinero" → di "2.400€ al año".
+- stock_keywords: escenas con PERSONAS haciendo cosas reales. Nada de gráficos abstractos.
+- image_prompt: cinematográfico, emocional, SIN texto en la imagen."""
 
 
 class ScriptAgent:
     def generate(self, topic: str | None = None) -> dict:
         """
         Genera un guión completo para un Short.
+        Usa llm_client: Claude CLI (claude -p) → fallback Ollama.
 
         Args:
             topic: Tema sugerido. None = el agente elige uno de su banco de temas.
@@ -62,59 +84,14 @@ class ScriptAgent:
         prompt = SCRIPT_PROMPT_TEMPLATE.format(topic=topic)
         logger.info(f"Generando guión sobre: {topic}")
 
-        # Intentar Ollama primero
-        script = self._try_ollama(prompt)
-        if script is None:
-            logger.warning("Ollama falló o no disponible, usando Claude API como fallback")
-            script = self._try_claude(prompt)
+        raw = generate(SYSTEM_PROMPT, prompt)
+        script = self._parse_json(raw)
 
         if script is None:
-            raise RuntimeError("No se pudo generar el guión (Ollama y Claude API fallaron)")
+            raise RuntimeError("No se pudo generar el guión (respuesta no es JSON válido)")
 
         logger.info(f"Guión generado: '{script.get('title', 'sin título')}'")
         return script
-
-    # ── Ollama ────────────────────────────────────────────────────────────────
-
-    def _try_ollama(self, prompt: str) -> dict | None:
-        try:
-            response = requests.post(
-                f"{OLLAMA_URL}/api/generate",
-                json={
-                    "model": OLLAMA_MODEL,
-                    "prompt": f"{SYSTEM_PROMPT}\n\n{prompt}",
-                    "stream": False,
-                    "options": {
-                        "temperature": 0.7,
-                        "num_predict": 1024,
-                    },
-                },
-                timeout=120,
-            )
-            response.raise_for_status()
-            raw = response.json().get("response", "")
-            return self._parse_json(raw)
-        except Exception as e:
-            logger.warning(f"Ollama error: {e}")
-            return None
-
-    # ── Claude API ────────────────────────────────────────────────────────────
-
-    def _try_claude(self, prompt: str) -> dict | None:
-        try:
-            import anthropic
-            client = anthropic.Anthropic()
-            message = client.messages.create(
-                model=CLAUDE_MODEL,
-                max_tokens=1024,
-                system=SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            raw = message.content[0].text
-            return self._parse_json(raw)
-        except Exception as e:
-            logger.error(f"Claude API error: {e}")
-            return None
 
     # ── Utilidades ────────────────────────────────────────────────────────────
 
@@ -153,20 +130,25 @@ class ScriptAgent:
         """Selecciona un tema de finanzas del banco de temas."""
         import random
         topics = [
-            "Cómo ahorrar el 20% de tu sueldo automáticamente",
-            "El error que cometen el 90% de los que invierten por primera vez",
-            "Regla del 50-30-20 para gestionar tu dinero",
-            "Por qué el interés compuesto te hace rico (o pobre)",
-            "3 gastos que debes eliminar para mejorar tus finanzas",
-            "La diferencia entre activos y pasivos que nadie te enseña",
-            "Cómo crear un fondo de emergencia en 3 meses",
-            "Inversión en fondos indexados para principiantes",
-            "Cómo negociar un aumento de sueldo con éxito",
-            "El secreto de las personas que alcanzan la libertad financiera",
-            "Por qué deberías tener múltiples fuentes de ingreso",
-            "Cómo eliminar deudas con el método bola de nieve",
-            "ETF vs acciones individuales: qué te conviene más",
-            "El coste oculto de no invertir tus ahorros",
-            "Automatiza tus finanzas y deja de preocuparte por el dinero",
+            "El café diario te cuesta 1.200€ al año — qué pasaría si los invirtieras",
+            "Con 50€/mes en un indexado al 7% tendrás 26.000€ en 20 años",
+            "El 67% de españoles no tiene fondo de emergencia — cómo crear uno en 90 días",
+            "Tu banco te cobra 200€/año en comisiones que ni sabes que existen",
+            "La regla del 72: divide 72 entre el interés y sabrás cuándo se duplica tu dinero",
+            "Cobras 1.500€ y crees que no puedes ahorrar — el truco de las 24 horas",
+            "Un gasto de 30€/mes que no usas te roba 3.600€ en 10 años",
+            "Invertir 100€/mes desde los 25 vs desde los 35 — la diferencia son 100.000€",
+            "3 apps que te avisan antes de que tu cuenta baje de 500€",
+            "El método bola de nieve: cómo gente normal elimina 15.000€ de deuda",
+            "Por qué el 80% de los que compran acciones individuales pierden dinero",
+            "Ganar 2.000€ extra al año con cosas que ya tienes en casa",
+            "Tu suscripción de streaming te cuesta más que un fondo indexado mensual",
+            "Qué pasa si metes 200€/mes en un depósito al 3% durante 5 años",
+            "El error de los 20.000€ que cometen las parejas al comprar piso",
+            "Automatiza tus ahorros el día 1 del mes y no vuelvas a pensarlo",
+            "Inflación al 3% significa que tus 10.000€ valen 7.400€ en 10 años",
+            "Cómo negociar tu sueldo: datos dicen que el 70% que pide aumento, lo consigue",
+            "ETFs vs planes de pensiones — cuál te conviene más si tienes menos de 40",
+            "5€ al día en comida fuera son 1.825€ al año — prepara batch cooking",
         ]
         return random.choice(topics)

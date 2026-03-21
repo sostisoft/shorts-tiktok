@@ -208,6 +208,18 @@ class JobCheckpoint:
             return phase.get("output")
         return None
 
+    def reset_phases(self, phase_nums: list[int]):
+        """Resetea fases especificas para forzar regeneracion."""
+        for num in phase_nums:
+            key = str(num)
+            if key in self.data["phases"]:
+                del self.data["phases"][key]
+        self.data["status"] = "running"
+        self.data["failed_phase"] = None
+        self.data["updated_at"] = datetime.utcnow().isoformat()
+        self.save()
+        logger.info(f"[{self.job_id}] Fases {phase_nums} reseteadas para regeneracion")
+
     def next_phase(self) -> int:
         """Devuelve el numero de la primera fase que no esta completada."""
         for i in range(1, 7):

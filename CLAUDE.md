@@ -48,10 +48,17 @@ Corre 24/7 en un GMKtec EVO-X2 con Ubuntu 24.04 y AMD Ryzen AI MAX+ 395.
 ## Ejecución
 ```bash
 ./run.sh                  # scheduler automático (generación nocturna + publicación)
-./run.sh generate         # generar 1 vídeo
+./run.sh generate         # generar 1 vídeo (modo IA: FLUX + Ken Burns)
+./run.sh generate-stock   # generar 1 vídeo (modo stock: Pexels/Pixabay)
 ./run.sh publish          # publicar siguiente pendiente
 ./run.sh run              # generar + publicar
 ```
+
+## Modos de generación de vídeo
+- **Modo IA** (`VIDEO_SOURCE=ai`): FLUX.1 genera imágenes → Ken Burns/Wan2.1 anima → ~30-50 min/vídeo
+- **Modo Stock** (`VIDEO_SOURCE=stock`): Pexels/Pixabay descarga clips → ~30-60 seg/vídeo, 0% GPU
+- Se puede cambiar en .env o usar `generate-stock` para un solo vídeo
+- El modo stock necesita PEXELS_API_KEY y/o PIXABAY_API_KEY en .env
 
 ## Fases de construcción
 - [x] Fase 1: Setup del sistema (Ubuntu + ROCm 7.2 + TheRock + Python)

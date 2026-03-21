@@ -36,8 +36,10 @@ def main():
     # ── Entrada manual: python main.py generate ──
     if len(sys.argv) > 1:
         cmd = sys.argv[1].lower()
-        if cmd == "generate":
-            logger.info("Generación manual iniciada")
+        if cmd in ("generate", "generate-stock"):
+            video_source = "stock" if cmd == "generate-stock" else None
+            mode_label = "STOCK footage" if video_source == "stock" else "IA"
+            logger.info(f"Generacion manual iniciada (modo: {mode_label})")
             # Si existe un script JSON pendiente, usarlo en lugar del LLM
             script_file = Path("output/.pending_script.json")
             script = None
@@ -48,7 +50,7 @@ def main():
                     logger.info(f"Usando guion manual: {script.get('title', '?')}")
                 except Exception as e:
                     logger.error(f"Error leyendo script manual: {e}")
-            job_id = generate_only(script=script)
+            job_id = generate_only(script=script, video_source=video_source)
             if job_id:
                 logger.info(f"Generado: {job_id}")
             else:
@@ -97,7 +99,14 @@ def main():
             return
         else:
             logger.error(f"Comando desconocido: {cmd}")
-            print("Uso: python main.py [generate|publish|run|resume [job_id]|status]")
+            print("Uso: python main.py [generate|generate-stock|publish|run|resume [job_id]|status]")
+            print("")
+            print("  generate        Genera 1 video con IA (FLUX + Ken Burns/Wan2.1)")
+            print("  generate-stock  Genera 1 video con stock footage (Pexels/Pixabay)")
+            print("  publish         Publica el siguiente video pendiente")
+            print("  run             Genera + publica inmediatamente")
+            print("  resume [id]     Reanuda un job fallido/interrumpido")
+            print("  status          Lista todos los jobs y su estado")
             return
 
     # ── Scheduler automático ──
@@ -140,7 +149,7 @@ def main():
     logger.info("Generación nocturna: 00:00-06:00 (Madrid)")
     logger.info("Publicaciones: 09:00, 14:00, 19:00 (Madrid)")
     logger.info("Canal: @finanzasjpg")
-    logger.info("Entrada manual: python main.py [generate|publish|run|resume|status]")
+    logger.info("Entrada manual: python main.py [generate|generate-stock|publish|run|resume|status]")
 
     try:
         scheduler.start()

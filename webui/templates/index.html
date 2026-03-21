@@ -67,6 +67,37 @@
         .model-opt:hover{border-color:var(--acc)}.model-opt.sel{border-color:var(--acc);background:rgba(99,102,241,.1)}
         .model-opt .m-name{font-size:12px;font-weight:700;color:var(--txt)}.model-opt .m-desc{font-size:9px;color:var(--t2);margin-top:2px}
         .model-opt .m-time{font-size:10px;color:var(--org);font-weight:700;margin-top:3px}
+        /* Phase pipeline config */
+        .phase-grid{display:flex;flex-direction:column;gap:8px}
+        .phase-row{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--brd)}
+        .phase-row:last-child{border-bottom:none}
+        .phase-label{min-width:120px;display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t2)}
+        .phase-num{background:var(--s3);color:var(--ac2);font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;min-width:20px;text-align:center}
+        .phase-opts{display:flex;gap:6px;flex:1;flex-wrap:wrap}
+        .phase-opt{background:var(--s2);border:1px solid var(--brd);border-radius:6px;padding:5px 10px;cursor:pointer;transition:.2s;flex:1;min-width:120px}
+        .phase-opt:hover{border-color:var(--acc)}.phase-opt.sel{border-color:var(--acc);background:rgba(99,102,241,.1)}
+        .phase-opt .opt-name{font-size:11px;font-weight:700}.phase-opt .opt-desc{font-size:8px;color:var(--t2);margin-top:1px}
+        .opt-tags{display:flex;gap:3px;margin-top:2px}
+        .tag{font-size:7px;padding:1px 4px;border-radius:3px;font-weight:700;text-transform:uppercase;letter-spacing:.3px}
+        .tag.api{background:rgba(6,182,212,.15);color:var(--cyn)}.tag.local{background:rgba(99,102,241,.15);color:var(--ac2)}
+        .tag.free{background:rgba(34,197,94,.15);color:var(--grn)}.tag.gpu{background:rgba(249,115,22,.15);color:var(--org)}
+        .tag.paid{background:rgba(239,68,68,.15);color:var(--red)}
+        .phase-fixed{background:var(--s2);border:1px solid var(--brd);border-radius:6px;padding:5px 10px;opacity:.5;flex:1;min-width:120px}
+        .phase-fixed .opt-name{font-size:11px;font-weight:700;color:var(--t2)}.phase-fixed .opt-desc{font-size:8px;color:var(--t2);margin-top:1px}
+        /* Jobs management */
+        .job-row{background:var(--s2);border:1px solid var(--brd);border-radius:8px;padding:10px;margin-bottom:6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+        .job-row:last-child{margin-bottom:0}
+        .job-id{font-size:11px;font-weight:800;color:var(--ac2);min-width:70px}
+        .job-title{font-size:11px;color:var(--txt);flex:1;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .job-phases{display:flex;gap:3px}
+        .job-phase{font-size:8px;padding:3px 7px;border-radius:4px;font-weight:700;cursor:pointer;transition:.2s;user-select:none;border:1px solid transparent}
+        .job-phase.done{background:rgba(34,197,94,.15);color:var(--grn)}
+        .job-phase.failed{background:rgba(239,68,68,.15);color:var(--red)}
+        .job-phase.running{background:rgba(234,179,8,.15);color:var(--yel)}
+        .job-phase.pending{background:var(--s3);color:var(--t2)}
+        .job-phase.reset-mark{border-color:var(--red);background:rgba(239,68,68,.1);color:var(--red);text-decoration:line-through}
+        .job-phase:hover{opacity:.8}
+        .job-actions{display:flex;gap:4px;align-items:center}
     </style>
 </head>
 <body>
@@ -119,22 +150,78 @@
             <span id="jobInfo" style="color:var(--t2);text-transform:none;letter-spacing:0">Idle</span>
         </div>
         <div class="card-b">
-            <!-- Model selector -->
+            <!-- Per-phase pipeline config -->
             <div style="margin-bottom:10px">
-                <div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Modelo de video</div>
-                <div class="model-row" id="modelRow">
-                    <div class="model-opt sel" data-model="kenburns" onclick="selectModel(this)">
-                        <div class="m-name">Ken Burns</div>
-                        <div class="m-desc">Zoom/pan cinematografico sobre imagenes FLUX. Rapido y estable.</div>
-                        <div class="m-time">~8 min total</div>
+                <div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Pipeline — Configuracion por Fase</div>
+                <div class="phase-grid">
+                    <!-- Phase 1: Script (fixed) -->
+                    <div class="phase-row">
+                        <div class="phase-label"><span class="phase-num">1</span> Guion</div>
+                        <div class="phase-opts">
+                            <div class="phase-fixed"><div class="opt-name">Ollama + Claude</div><div class="opt-tags"><span class="tag local">LOCAL</span><span class="tag free">GRATIS</span></div><div class="opt-desc">Qwen 2.5 14B con fallback Claude API</div></div>
+                        </div>
                     </div>
-                    <div class="model-opt" data-model="wan21" onclick="selectModel(this)">
-                        <div class="m-name">Wan2.1 14B</div>
-                        <div class="m-desc">IA generativa real (imagen→video). Movimiento natural. Requiere mucha VRAM.</div>
-                        <div class="m-time">~45 min total</div>
+                    <!-- Phase 2+4: Visual -->
+                    <div class="phase-row">
+                        <div class="phase-label"><span class="phase-num">2+4</span> Visual</div>
+                        <div class="phase-opts" id="visualRow">
+                            <div class="phase-opt sel" data-visual="stock" onclick="selectVisual(this)">
+                                <div class="opt-name" style="color:var(--cyn)">Stock Footage</div>
+                                <div class="opt-tags"><span class="tag api">API</span><span class="tag free">GRATIS</span></div>
+                                <div class="opt-desc">Pexels/Pixabay ~15s</div>
+                            </div>
+                            <div class="phase-opt" data-visual="kenburns" onclick="selectVisual(this)">
+                                <div class="opt-name">FLUX + Ken Burns</div>
+                                <div class="opt-tags"><span class="tag local">LOCAL</span><span class="tag gpu">GPU</span></div>
+                                <div class="opt-desc">IA imagenes + zoom ~8min</div>
+                            </div>
+                            <div class="phase-opt" data-visual="wan21" onclick="selectVisual(this)">
+                                <div class="opt-name">FLUX + Wan2.1</div>
+                                <div class="opt-tags"><span class="tag local">LOCAL</span><span class="tag gpu">GPU</span></div>
+                                <div class="opt-desc">IA imagenes + video ~45min</div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Phase 3: TTS -->
+                    <div class="phase-row">
+                        <div class="phase-label"><span class="phase-num">3</span> Voz</div>
+                        <div class="phase-opts" id="ttsPhaseRow">
+                            <div class="phase-opt sel" data-tts="edge" onclick="selectTtsPhase(this)">
+                                <div class="opt-name">Edge TTS</div>
+                                <div class="opt-tags"><span class="tag api">API</span><span class="tag free">GRATIS</span></div>
+                                <div class="opt-desc">Microsoft Neural, ilimitado</div>
+                            </div>
+                            <div class="phase-opt" data-tts="elevenlabs" onclick="selectTtsPhase(this)">
+                                <div class="opt-name" style="color:var(--org)">ElevenLabs</div>
+                                <div class="opt-tags"><span class="tag api">API</span><span class="tag paid">PAGO</span></div>
+                                <div class="opt-desc">Premium, 10k chars/mes</div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Phase 5: Music -->
+                    <div class="phase-row">
+                        <div class="phase-label"><span class="phase-num">5</span> Musica</div>
+                        <div class="phase-opts" id="musicRow">
+                            <div class="phase-opt sel" data-music="tracks" onclick="selectMusic(this)">
+                                <div class="opt-name">Tracks</div>
+                                <div class="opt-tags"><span class="tag local">LOCAL</span><span class="tag free">GRATIS</span></div>
+                                <div class="opt-desc">Royalty-free, instantaneo</div>
+                            </div>
+                            <div class="phase-opt" data-music="musicgen" onclick="selectMusic(this)">
+                                <div class="opt-name">MusicGen</div>
+                                <div class="opt-tags"><span class="tag local">LOCAL</span><span class="tag gpu">GPU</span></div>
+                                <div class="opt-desc">Meta IA, genera unico ~18s</div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Phase 6: Compositing (fixed) -->
+                    <div class="phase-row">
+                        <div class="phase-label"><span class="phase-num">6</span> Edicion</div>
+                        <div class="phase-opts">
+                            <div class="phase-fixed"><div class="opt-name">FFmpeg</div><div class="opt-tags"><span class="tag local">LOCAL</span><span class="tag free">GRATIS</span></div><div class="opt-desc">Concat + subs + audio mix</div></div>
+                        </div>
                     </div>
                 </div>
-                <div id="modelNote" style="font-size:9px;color:var(--t2);margin-top:6px">Ken Burns: FLUX genera 5 imagenes (~7 min) + zoom/pan instantaneo + TTS + musica. Total ~8 min.</div>
             </div>
             <!-- Language selector -->
             <div style="margin-bottom:10px">
@@ -142,15 +229,15 @@
                 <div class="model-row" id="langRow">
                     <div class="model-opt sel" data-lang="es" onclick="selectLang(this)">
                         <div class="m-name">Espanol</div>
-                        <div class="m-desc">Castellano, AlvaroNeural (Edge TTS, pitch -7Hz).</div>
+                        <div class="m-desc">Castellano, AlvaroNeural.</div>
                     </div>
                     <div class="model-opt" data-lang="en" onclick="selectLang(this)">
                         <div class="m-name">English</div>
-                        <div class="m-desc">American English, female voice (af_sarah). Speed 0.9.</div>
+                        <div class="m-desc">American English.</div>
                     </div>
                     <div class="model-opt" data-lang="both" onclick="selectLang(this)">
                         <div class="m-name">Ambos</div>
-                        <div class="m-desc">Genera version ES + EN del mismo video.</div>
+                        <div class="m-desc">Genera version ES + EN.</div>
                     </div>
                 </div>
             </div>
@@ -170,6 +257,55 @@
             <!-- Pipeline progress -->
             <div id="genArea">
                 <div style="color:var(--t2);text-align:center;font-size:11px">Sin generaciones activas</div>
+            </div>
+        </div>
+    </div>
+    <!-- TTS Settings -->
+    <div class="card">
+        <div class="card-h" style="cursor:pointer" onclick="toggleTtsPanel()">
+            <span>Configuracion de Voz</span>
+            <span id="ttsToggle" style="color:var(--t2);font-size:14px">&#9660;</span>
+        </div>
+        <div class="card-b" id="ttsPanel" style="display:none">
+            <!-- Engine selector -->
+            <div style="margin-bottom:12px">
+                <div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Motor de Voz</div>
+                <div class="model-row" id="ttsEngineRow">
+                    <div class="model-opt sel" data-engine="edge" onclick="selectTtsEngine(this)">
+                        <div class="m-name">Edge TTS</div>
+                        <div class="m-desc">Microsoft Neural. Gratis e ilimitado. AlvaroNeural (ES).</div>
+                        <div class="m-time" style="color:var(--grn)">Ilimitado</div>
+                    </div>
+                    <div class="model-opt" data-engine="elevenlabs" onclick="selectTtsEngine(this)">
+                        <div class="m-name" style="color:var(--org)">ElevenLabs</div>
+                        <div class="m-desc">Calidad premium. 10.000 chars/mes gratis (~15 videos).</div>
+                        <div class="m-time" style="color:var(--org)">Cuota limitada</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ElevenLabs config (hidden by default) -->
+            <div id="elevenLabsConfig" style="display:none;margin-bottom:12px;background:var(--s2);border:1px solid var(--brd);border-radius:8px;padding:12px">
+                <div style="font-size:10px;font-weight:700;color:var(--org);margin-bottom:8px">ELEVENLABS</div>
+                <div style="display:flex;gap:8px;margin-bottom:8px">
+                    <input type="password" id="elApiKey" placeholder="API Key de ElevenLabs"
+                        style="flex:1;background:var(--s3);border:1px solid var(--brd);color:var(--txt);padding:6px 10px;border-radius:5px;font-size:11px">
+                    <button class="btn-s btn-o" onclick="saveElevenLabsKey()">Guardar</button>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+                    <select id="elVoiceSelect" style="flex:1;background:var(--s3);border:1px solid var(--brd);color:var(--txt);padding:6px 10px;border-radius:5px;font-size:11px">
+                        <option value="">-- Carga voces primero --</option>
+                    </select>
+                    <button class="btn-s btn-o" onclick="loadElevenLabsVoices()">Cargar Voces</button>
+                </div>
+                <div id="elQuota" style="font-size:10px;color:var(--t2)"></div>
+            </div>
+
+            <!-- Test button -->
+            <div style="display:flex;gap:8px;align-items:center">
+                <button class="btn btn-s" onclick="testTts()">Probar Voz</button>
+                <span id="ttsTestStatus" style="font-size:10px;color:var(--t2)"></span>
+                <audio id="ttsTestAudio" style="display:none"></audio>
             </div>
         </div>
     </div>
@@ -209,7 +345,7 @@
     </div>
 </div>
 <script>
-const STEPS=[
+const STEPS_AI=[
     {id:"init",l:"Inicio",t:"~5s"},{id:"decide",l:"LLM",t:"~10s"},
     {id:"flux",l:"FLUX x5",t:"~7min"},{id:"clips",l:"Clips x5",t:"~3s"},
     {id:"concat",l:"Concat",t:"~1s"},{id:"music",l:"Music",t:"~18s"},
@@ -217,6 +353,16 @@ const STEPS=[
     {id:"tts_en",l:"TTS EN",t:"~14s"},{id:"mix_en",l:"Mix EN",t:"~8s"},{id:"subs_en",l:"Subs EN",t:"~15s"},{id:"cta_en",l:"CTA EN",t:"~8s"},
     {id:"done",l:"OK",t:""}
 ];
+const STEPS_STOCK=[
+    {id:"init",l:"Inicio",t:"~5s"},{id:"decide",l:"LLM",t:"~10s"},
+    {id:"flux",l:"(skip)",t:""},{id:"clips",l:"Stock DL",t:"~15s"},
+    {id:"concat",l:"Concat",t:"~1s"},{id:"music",l:"Music",t:"~18s"},
+    {id:"tts_es",l:"TTS ES",t:"~14s"},{id:"mix_es",l:"Mix ES",t:"~8s"},{id:"subs_es",l:"Subs ES",t:"~15s"},{id:"cta_es",l:"CTA ES",t:"~8s"},
+    {id:"tts_en",l:"TTS EN",t:"~14s"},{id:"mix_en",l:"Mix EN",t:"~8s"},{id:"subs_en",l:"Subs EN",t:"~15s"},{id:"cta_en",l:"CTA EN",t:"~8s"},
+    {id:"done",l:"OK",t:""}
+];
+function getSteps(){return selectedModel==='stock'?STEPS_STOCK:STEPS_AI;}
+const STEPS=STEPS_AI; // default
 let genStart=null, curStep="init", curProgress=0;
 
 // ── WebSocket ──
@@ -272,8 +418,9 @@ function colorize(text){
 }
 
 function renderSteps(cur){
-    const i=STEPS.findIndex(s=>s.id===cur);
-    return STEPS.map((s,j)=>{
+    const steps=getSteps();
+    const i=steps.findIndex(s=>s.id===cur);
+    return steps.map((s,j)=>{
         const cls=j<i?'done':j===i?'active':'';
         const time=s.t&&j===i?` <span style="font-size:7px;opacity:.7">${s.t}</span>`:'';
         return `<span class="pill${cls?' '+cls:''}" title="${s.t}">${s.l}${time}</span>`;
@@ -283,7 +430,8 @@ function renderSteps(cur){
 function updatePipeline(){
     const area=document.getElementById("genArea");
     if(curProgress>0 && curProgress<100){
-        const label=STEPS.find(s=>s.id===curStep)?.l||"...";
+        const steps=getSteps();
+        const label=steps.find(s=>s.id===curStep)?.l||"...";
         area.innerHTML=`
             <div class="pipe-wrap"><div class="pipe-bar" style="width:${curProgress}%">${curProgress}%</div></div>
             <div class="steps" style="margin-bottom:6px">${renderSteps(curStep)}</div>
@@ -360,16 +508,19 @@ async function loadVideos(){
 
 async function doGenerate(){
     const n=parseInt(document.getElementById('genCount').value)||1;
-    const est=MODEL_INFO[selectedModel].time;
+    const est=MODEL_INFO[selectedModel]?.time||'?';
+    const modelNames={kenburns:'Ken Burns',stock:'Stock Footage',wan21:'Wan2.1 14B'};
+    const musicNames={tracks:'Tracks (local)',musicgen:'MusicGen (IA)'};
     const langLabel={es:'Espanol',en:'English',both:'ES+EN'}[selectedLang];
     const script=validateScript();
     const src=script?`Guion: "${script.title}"`:'Guion: IA automatica';
-    if(!confirm(`Lanzar ${n} generacion(es)\n${src}\nModelo: ${selectedModel==='wan21'?'Wan2.1 14B':'Ken Burns'}\nIdioma: ${langLabel}\nTiempo: ${est} por video`))return;
+    if(!confirm(`Lanzar ${n} generacion(es)\n${src}\nVisual: ${modelNames[selectedModel]||selectedModel}\nVoz: ${selectedTtsEngine}\nMusica: ${musicNames[selectedMusic]||selectedMusic}\nIdioma: ${langLabel}\nTiempo: ${est} por video`))return;
     genStart=new Date();curStep="init";curProgress=0;
     document.getElementById('genArea').innerHTML='<div style="color:var(--ac2);text-align:center">Encolando...</div>';
     try{
         const langs=selectedLang==='both'?['es','en']:[selectedLang];
-        const body={count:n,model:selectedModel,langs:langs};
+        const videoSource=selectedModel==='stock'?'stock':'ai';
+        const body={count:n,model:selectedModel,langs:langs,video_source:videoSource,tts_engine:selectedTtsEngine,music_source:selectedMusic};
         if(script)body.script=script;
         const r=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
         const d=await r.json();if(d.error){alert(d.error);genStart=null;}
@@ -379,14 +530,32 @@ async function doGenerate(){
 // ── Model selector ──
 const MODEL_INFO={
     kenburns:{note:'Ken Burns: FLUX genera 5 imagenes (~7 min) + zoom/pan instantaneo + TTS + musica. Total ~8 min.',time:'~8 min'},
+    stock:{note:'Stock Footage: descarga clips de Pexels/Pixabay (~15s) + TTS + musica. Total ~1 min. Sin GPU, sin FLUX.',time:'~1 min'},
     wan21:{note:'Wan2.1 14B: FLUX genera 5 imagenes (~7 min) + Wan2.1 I2V por clip (~6 min x5) + TTS + musica. Total ~45 min. Necesita ~60 GB VRAM.',time:'~45 min'}
 };
-let selectedModel='kenburns';
-function selectModel(el){
-    document.querySelectorAll('#modelRow .model-opt').forEach(e=>e.classList.remove('sel'));
+let selectedModel='stock';
+let selectedMusic='tracks';
+
+function selectVisual(el){
+    document.querySelectorAll('#visualRow .phase-opt').forEach(e=>e.classList.remove('sel'));
     el.classList.add('sel');
-    selectedModel=el.dataset.model;
-    document.getElementById('modelNote').textContent=MODEL_INFO[selectedModel].note;
+    selectedModel=el.dataset.visual;
+}
+
+function selectTtsPhase(el){
+    document.querySelectorAll('#ttsPhaseRow .phase-opt').forEach(e=>e.classList.remove('sel'));
+    el.classList.add('sel');
+    selectedTtsEngine=el.dataset.tts;
+    // Sync with TTS config panel if open
+    document.querySelectorAll('#ttsEngineRow .model-opt').forEach(e=>e.classList.toggle('sel',e.dataset.engine===selectedTtsEngine));
+    document.getElementById('elevenLabsConfig').style.display=selectedTtsEngine==='elevenlabs'?'block':'none';
+    fetch('/api/tts/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({engine:selectedTtsEngine})});
+}
+
+function selectMusic(el){
+    document.querySelectorAll('#musicRow .phase-opt').forEach(e=>e.classList.remove('sel'));
+    el.classList.add('sel');
+    selectedMusic=el.dataset.music;
 }
 
 // ── Language selector ──
@@ -456,6 +625,123 @@ function togglePlay(btn){
     const vid=btn.closest('.vid-card').querySelector('video');
     if(vid.paused){vid.play();btn.textContent='⏸ Pause';}
     else{vid.pause();btn.textContent='▶ Play';}
+}
+
+// ── TTS Config ──
+let selectedTtsEngine = 'edge';
+
+function toggleTtsPanel() {
+    const p = document.getElementById('ttsPanel');
+    const t = document.getElementById('ttsToggle');
+    if (p.style.display === 'none') { p.style.display = 'block'; t.innerHTML = '&#9650;'; loadTtsConfig(); }
+    else { p.style.display = 'none'; t.innerHTML = '&#9660;'; }
+}
+
+function selectTtsEngine(el) {
+    document.querySelectorAll('#ttsEngineRow .model-opt').forEach(e => e.classList.remove('sel'));
+    el.classList.add('sel');
+    selectedTtsEngine = el.dataset.engine;
+    document.getElementById('elevenLabsConfig').style.display = selectedTtsEngine === 'elevenlabs' ? 'block' : 'none';
+    // Sync phase selector
+    document.querySelectorAll('#ttsPhaseRow .phase-opt').forEach(e=>e.classList.toggle('sel',e.dataset.tts===selectedTtsEngine));
+    // Save to backend
+    fetch('/api/tts/config', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({engine: selectedTtsEngine})
+    });
+}
+
+async function loadTtsConfig() {
+    try {
+        const d = await (await fetch('/api/tts/config')).json();
+        selectedTtsEngine = d.engine || 'edge';
+        document.querySelectorAll('#ttsEngineRow .model-opt').forEach(el => {
+            el.classList.toggle('sel', el.dataset.engine === selectedTtsEngine);
+        });
+        document.getElementById('elevenLabsConfig').style.display = selectedTtsEngine === 'elevenlabs' ? 'block' : 'none';
+        if (d.elevenlabs_key_set) {
+            document.getElementById('elApiKey').placeholder = '••••••••• (ya configurada)';
+            loadElevenLabsQuota();
+        }
+        if (d.elevenlabs_voice_id) {
+            const sel = document.getElementById('elVoiceSelect');
+            sel.innerHTML = `<option value="${d.elevenlabs_voice_id}">Voice: ${d.elevenlabs_voice_id}</option>`;
+        }
+    } catch(e) {}
+}
+
+async function saveElevenLabsKey() {
+    const key = document.getElementById('elApiKey').value.trim();
+    if (!key) return;
+    const r = await fetch('/api/tts/config', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({elevenlabs_key: key})
+    });
+    const d = await r.json();
+    if (d.ok) {
+        document.getElementById('elApiKey').value = '';
+        document.getElementById('elApiKey').placeholder = '••••••••• (guardada)';
+        loadElevenLabsVoices();
+        loadElevenLabsQuota();
+    }
+}
+
+async function loadElevenLabsVoices() {
+    const sel = document.getElementById('elVoiceSelect');
+    sel.innerHTML = '<option value="">Cargando...</option>';
+    try {
+        const voices = await (await fetch('/api/tts/voices')).json();
+        if (voices.error) { sel.innerHTML = `<option value="">${voices.error}</option>`; return; }
+        sel.innerHTML = voices.map(v =>
+            `<option value="${v.voice_id}">${v.name} (${v.labels?.accent || v.labels?.gender || v.category || ''})</option>`
+        ).join('');
+        // Auto-select current voice
+        const cfg = await (await fetch('/api/tts/config')).json();
+        if (cfg.elevenlabs_voice_id) sel.value = cfg.elevenlabs_voice_id;
+        // Save on change
+        sel.onchange = async () => {
+            await fetch('/api/tts/config', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({elevenlabs_voice_id: sel.value})
+            });
+        };
+    } catch(e) { sel.innerHTML = '<option value="">Error cargando voces</option>'; }
+}
+
+async function loadElevenLabsQuota() {
+    try {
+        const d = await (await fetch('/api/tts/quota')).json();
+        if (d.error) return;
+        const pct = Math.round(d.remaining / d.character_limit * 100);
+        const color = pct > 50 ? 'var(--grn)' : pct > 20 ? 'var(--yel)' : 'var(--red)';
+        document.getElementById('elQuota').innerHTML =
+            `Cuota: <b style="color:${color}">${d.remaining.toLocaleString()}</b> / ${d.character_limit.toLocaleString()} chars restantes (${d.tier})`;
+    } catch(e) {}
+}
+
+async function testTts() {
+    const st = document.getElementById('ttsTestStatus');
+    st.textContent = 'Generando...';
+    st.style.color = 'var(--ac2)';
+    try {
+        const r = await fetch('/api/tts/test', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({engine: selectedTtsEngine})
+        });
+        const d = await r.json();
+        if (d.error) { st.textContent = d.error; st.style.color = 'var(--red)'; return; }
+        const audio = document.getElementById('ttsTestAudio');
+        audio.src = 'data:audio/wav;base64,' + d.audio;
+        audio.style.display = 'inline';
+        audio.play();
+        st.textContent = 'Reproduciendo...';
+        st.style.color = 'var(--grn)';
+        audio.onended = () => { st.textContent = 'Listo'; };
+    } catch(e) { st.textContent = 'Error: ' + e.message; st.style.color = 'var(--red)'; }
 }
 
 loadStatus();loadVideos();loadPending();
