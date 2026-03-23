@@ -1,0 +1,49 @@
+import { NextRequest, NextResponse } from "next/server";
+import { apiGet, apiDelete, APIError } from "@/lib/api-client";
+import { getSession } from "@/lib/auth";
+import type { VideoResponse } from "@/lib/types";
+
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const session = await getSession();
+  if (!session.apiKey) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { id } = await params;
+  try {
+    const result = await apiGet<VideoResponse>(
+      `/api/videos/${id}`,
+      session.apiKey,
+    );
+    return NextResponse.json(result);
+  } catch (err) {
+    if (err instanceof APIError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    throw err;
+  }
+}
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const session = await getSession();
+  if (!session.apiKey) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { id } = await params;
+  try {
+    const result = await apiDelete(`/api/videos/${id}`, session.apiKey);
+    return NextResponse.json(result);
+  } catch (err) {
+    if (err instanceof APIError) {
+      return NextResponse.json({ error: err.message }, { status: err.status });
+    }
+    throw err;
+  }
+}
