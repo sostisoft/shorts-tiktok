@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.api
     ports:
-      - "8087:8000"
+      - "10040:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -46,7 +46,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
-      - "5438:5432"
+      - "10041:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U shortforge"]
       interval: 5s
@@ -57,7 +57,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6382:6379"
+      - "10042:6379"
     restart: unless-stopped
 
   minio:
@@ -67,8 +67,8 @@ services:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
     ports:
-      - "9002:9000"
-      - "9003:9001"
+      - "10043:9000"
+      - "10044:9001"
     volumes:
       - miniodata:/data
     restart: unless-stopped
@@ -78,7 +78,7 @@ services:
       context: ./dashboard
       dockerfile: Dockerfile
     ports:
-      - "3050:3000"
+      - "10045:3000"
     environment:
       API_BASE_URL: http://api:8000
       SESSION_SECRET: ${SESSION_SECRET:-change-me-to-a-random-32-character-string!!}
@@ -90,7 +90,7 @@ services:
   nginx:
     image: nginx:alpine
     ports:
-      - "8090:80"
+      - "10046:80"
     volumes:
       - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
